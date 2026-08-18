@@ -1,6 +1,6 @@
 agency:
   name: Lattice App Works
-  version: 2.2.0
+  version: 2.3.0
   edition: portfolio_autonomous_assurance
   operating_mode: management_by_exception
   project_model: isolated_project_capsules

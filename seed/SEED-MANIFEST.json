@@ -1,0 +1,12 @@
+{
+  "contains_real_personal_data": false,
+  "example_project_id": "example-001",
+  "format": "lattice-sanitized-seed",
+  "initialized": false,
+  "required_before_delivery": [
+    "initialize_seed",
+    "confirm_project_mandate",
+    "validate"
+  ],
+  "version": "2.3.0"
+}

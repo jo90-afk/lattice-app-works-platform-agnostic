@@ -1,27 +1,12 @@
-# Lattice App Works Portfolio Registry
+# Portfolio Registry
 
-**Agency version:** 2.1.0  
-**Principal:** Jude O'Neill  
-**Principal scope:** Sole human Principal for the agency and all currently registered projects  
-**Updated:** 2026-08-06 — Gate 2 internal runtime-block checkpoint
+**Principal alias:** <PRINCIPAL_ALIAS>  
+**Registry state:** UNINITIALIZED SEED  
+**Scheduling rule:** Principal priority, then dependency readiness, then age.  
+**Concurrency limit:** 3 specialist threads.
 
-## Scheduling policy
+| Project ID | Project | Priority | State | Capsule |
+| --- | --- | --- | --- | --- |
+| <PROJECT_ID> | <PROJECT_NAME> | Unranked | Uninitialized | projects/<PROJECT_ID>/ |
 
-- Maximum concurrent specialist threads: 3 across the portfolio
-- Order: Principal priority, then dependency readiness, then oldest ready work
-- A blocked project does not stop unrelated ready work
-- Cross-project priority changes require a Principal decision; routine scheduling inside this order is Director-owned
-
-## Registered projects
-
-| Project ID | Name | Lifecycle | Priority | Current gate | Current action | Capsule source |
-| --- | --- | --- | --- | --- | --- | --- |
-| `plos-001` | Personal Life OS | Active | 1 | Gate 2 — Experience | Internal runtime block; reissue WO-007-OPS-RCA after fresh session allocation | `Personal_Life_OS_Project_Capsule_plos-001_v2.1.0.md` |
-
-## Portfolio decisions pending
-
-None.
-
-## Boundary
-
-This registry owns identity, priority, capacity, and capsule routing only. Product mandates, platform choices, requirements, data rules, integrations, evidence, and release state belong in their respective project capsules. The registry cannot amend the Agency Kernel.
+The Principal alias identifies the human accountable for mandates and consequence-boundary decisions. Use an alias rather than a personal name if the repository may become public.

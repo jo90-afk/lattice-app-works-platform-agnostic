@@ -73,7 +73,7 @@ def write_export(project_id: str, destination: Path, overwrite: bool) -> None:
     (destination / pack_name).write_text(pack, encoding="utf-8")
     manifest = {
         "format": "lattice-chatgpt-work-source-pack",
-        "version": "2.2.0",
+        "version": "2.3.0",
         "project_id": project_id,
         "pack_file": pack_name,
         "pack_sha256": sha256(pack),

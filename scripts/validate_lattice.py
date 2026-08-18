@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Validate portable Lattice boundaries without third-party dependencies."""
+"""Validate portable Lattice seed boundaries without third-party dependencies."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import re
-import sys
 from pathlib import Path
 
 
@@ -26,10 +25,17 @@ def text(path: Path) -> str:
         return ""
 
 
-def require_files(paths: list[str]) -> None:
+def require(paths: list[str]) -> None:
     for relative in paths:
         if not (ROOT / relative).is_file():
             fail("Missing required file: " + relative)
+
+
+def project_ids() -> list[str]:
+    folder = ROOT / "projects"
+    if not folder.is_dir():
+        return []
+    return sorted(path.name for path in folder.iterdir() if path.is_dir() and (path / "PROJECT.md").is_file())
 
 
 def roles() -> None:
@@ -65,16 +71,17 @@ def boundaries() -> None:
     for folder in ("agents", "governance", "templates"):
         kernel.extend(sorted((ROOT / folder).glob("*.md")))
     for path in kernel:
-        body = text(path)
-        if "plos-001" in body or "Personal Life OS" in body:
-            fail("Project state leaked into Agency Kernel: " + str(path.relative_to(ROOT)))
+        if "<PROJECT_ID>" in text(path):
+            fail("Project placeholder leaked into Agency Kernel: " + str(path.relative_to(ROOT)))
     if "platform: chatgpt_work" in text(ROOT / "agency.yaml"):
         fail("agency.yaml retains a default ChatGPT Work platform")
-    capsule = ROOT / "projects" / "plos-001"
-    if not (capsule / "PROJECT.md").is_file():
-        fail("Missing plos-001 project capsule")
-    if list(capsule.rglob("AGENTS.md")) or list(capsule.rglob("agency.yaml")):
-        fail("Project capsule copied Agency Kernel files")
+    projects = project_ids()
+    if not projects:
+        fail("No project capsule exists")
+    for project in projects:
+        capsule = ROOT / "projects" / project
+        if list(capsule.rglob("AGENTS.md")) or list(capsule.rglob("agency.yaml")):
+            fail("Project capsule copied Agency Kernel files: " + project)
 
 
 def adapters() -> None:
@@ -83,55 +90,36 @@ def adapters() -> None:
         "adapters/codex/README.md", "adapters/claude/README.md",
         "adapters/chatgpt-work/README.md",
         "adapters/chatgpt-work/PROJECT-INSTRUCTIONS.md",
-        "scripts/lattice.py", "scripts/export_chatgpt_work.py",
+        "scripts/lattice.py", "scripts/initialize_seed.py",
+        "scripts/export_chatgpt_work.py",
     ]
-    require_files(required)
+    require(required)
     if "@AGENTS.md" not in text(ROOT / "CLAUDE.md"):
         fail("CLAUDE.md does not import canonical AGENTS.md")
-    for relative in required[1:7]:
-        body = text(ROOT / relative)
-        if "Personal Life OS" in body or "plos-001" in body:
-            fail("Project-specific state leaked into adapter: " + relative)
+    if "Initialize the seed" not in text(ROOT / "README.md"):
+        fail("README lacks seed initialization instructions")
 
 
-def provenance() -> None:
-    try:
-        data = json.loads(text(ROOT / "docs" / "source-provenance.json"))
-    except json.JSONDecodeError:
-        fail("Invalid source provenance JSON")
-        return
-    inventory = [
-        item
-        for bundle in data.get("source_bundles", {}).values()
-        for item in bundle.get("virtual_files", [])
-    ]
-    if len(inventory) != 129:
-        fail("Expected 129 preserved source artifacts")
-    for relative in inventory:
-        if not (ROOT / relative).is_file():
-            fail("Provenance references missing source: " + relative)
-    require_files(["docs/portable-build-manifest.json"])
-
-
-def export() -> None:
+def exports() -> None:
     from export_chatgpt_work import build_pack
-    project = "plos-001"
-    folder = ROOT / "exports" / "chatgpt-work" / project
-    pack = folder / "Lattice_ChatGPT_Work_Pack_plos-001.md"
-    instructions = folder / "PROJECT-INSTRUCTIONS.md"
-    manifest = folder / "source-manifest.json"
-    require_files([str(pack.relative_to(ROOT)), str(instructions.relative_to(ROOT)), str(manifest.relative_to(ROOT))])
-    expected = build_pack(project)
-    if text(pack) != expected:
-        fail("ChatGPT Work pack is stale; regenerate it")
-    if text(instructions) != text(ROOT / "adapters" / "chatgpt-work" / "PROJECT-INSTRUCTIONS.md"):
-        fail("ChatGPT Work instruction export is stale")
-    try:
-        data = json.loads(text(manifest))
-        if data.get("pack_sha256") != hashlib.sha256(expected.encode()).hexdigest():
-            fail("ChatGPT Work export hash does not match")
-    except json.JSONDecodeError:
-        fail("Invalid ChatGPT Work export manifest")
+    folders = [ROOT / "exports" / "chatgpt-work" / project for project in project_ids()]
+    for folder in folders:
+        project = folder.name
+        pack = folder / ("Lattice_ChatGPT_Work_Pack_" + project + ".md")
+        instructions = folder / "PROJECT-INSTRUCTIONS.md"
+        manifest = folder / "source-manifest.json"
+        require([str(pack.relative_to(ROOT)), str(instructions.relative_to(ROOT)), str(manifest.relative_to(ROOT))])
+        expected = build_pack(project)
+        if text(pack) != expected:
+            fail("ChatGPT Work pack is stale: " + project)
+        if text(instructions) != text(ROOT / "adapters" / "chatgpt-work" / "PROJECT-INSTRUCTIONS.md"):
+            fail("ChatGPT Work instructions are stale: " + project)
+        try:
+            data = json.loads(text(manifest))
+            if data.get("pack_sha256") != hashlib.sha256(expected.encode()).hexdigest():
+                fail("ChatGPT Work pack hash does not match: " + project)
+        except json.JSONDecodeError:
+            fail("Invalid ChatGPT Work manifest: " + project)
 
 
 def github() -> None:
@@ -144,20 +132,22 @@ def github() -> None:
         ".github/CODEOWNERS.example",
         ".github/workflows/validate.yml",
     ]
-    require_files(required)
+    require(required)
     workflow = text(ROOT / ".github" / "workflows" / "validate.yml")
     for fragment in ("pull_request:", "workflow_dispatch:", "scripts/validate_lattice.py"):
         if fragment not in workflow:
             fail("GitHub validation workflow is incomplete: " + fragment)
 
 
-def secrets() -> None:
+def privacy() -> None:
     patterns = [
         re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
         re.compile(r"\bghp_[A-Za-z0-9]{30,}\b"),
         re.compile(r"\bgithub_pat_[A-Za-z0-9_]{30,}\b"),
         re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
         re.compile(r"(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}"),
+        re.compile(r"(?<![A-Za-z0-9])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
+        re.compile(r"(?<!\d)(?:\+?1[-. ]?)?\(?\d{3}\)?[-. ]?\d{3}[-. ]?\d{4}(?!\d)"),
     ]
     for path in ROOT.rglob("*"):
         if not path.is_file() or ".git" in path.parts:
@@ -167,29 +157,28 @@ def secrets() -> None:
         body = text(path)
         for pattern in patterns:
             if pattern.search(body):
-                fail("Potential credential found in: " + str(path.relative_to(ROOT)))
+                fail("Potential credential or direct contact data found in: " + str(path.relative_to(ROOT)))
 
 
 def main() -> int:
-    require_files([
+    require([
         "README.md", "AGENTS.md", "agency.yaml", "portfolio/registry.md",
-        "portfolio/status.md", "projects/plos-001/PROJECT.md",
+        "portfolio/status.md", "seed/SEED-MANIFEST.json",
         "governance/charter.md", "governance/autonomy-policy.md",
         "governance/ownership.md", "governance/delivery-system.md",
     ])
     roles()
     boundaries()
     adapters()
-    provenance()
-    export()
+    exports()
     github()
-    secrets()
+    privacy()
     if ERRORS:
-        print("Lattice portability validation failed:")
+        print("Lattice seed validation failed:")
         for error in ERRORS:
             print("- " + error)
         return 1
-    print("Lattice portability validation passed: 11 roles, 22 write domains, 129 source artifacts, and a current ChatGPT Work pack.")
+    print("Lattice seed validation passed: 11 roles, 22 write domains, initialized or neutral project capsules, and current hosted packs.")
     return 0
 
 

@@ -1,20 +1,24 @@
 # Repository setup and GitHub upload
 
-## Keep it private first
+## Initialize before first use
 
-The current plos-001 capsule contains personal project material. Create a private repository and review the capsule before changing visibility.
+Run the seed initializer before creating work orders or uploading a hosted source pack:
+
+    python3 scripts/lattice.py initialize --principal-alias "Repository Owner" --project-id first-project --project-name "First Project"
+
+Use a non-sensitive alias if you expect to publish the repository.
 
 ## Generic Git upload
 
-After extracting this folder, run these commands from its root in any Git client or terminal:
+After extraction and initialization, run these commands from the repository root:
 
     git init -b main
     git add -A
-    git commit -m "chore: import Lattice App Works 2.2"
+    git commit -m "chore: initialize Lattice seed"
     git remote add origin https://github.com/<owner>/lattice-app-works.git
     git push -u origin main
 
-If your phone Git client provides buttons instead of commands, the equivalent is: initialize this extracted folder as a repository, stage every file, make the first commit, add the empty private GitHub repository as origin, then push the main branch.
+If your phone Git client provides buttons instead of commands, initialize this extracted folder as a repository, stage every file, make the first commit, add the empty private GitHub repository as origin, then push main.
 
 ## GitHub is an adapter
 

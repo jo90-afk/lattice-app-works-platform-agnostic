@@ -1,15 +1,9 @@
 # Changelog
 
-## 2.2.0 — Platform-neutral repository build
+## 2.3.0 — Sanitized seed distribution
 
-- Made the repository, rather than ChatGPT Work, the canonical Lattice runtime.
-- Preserved the Agency Kernel, Portfolio Registry, and isolated plos-001 capsule.
-- Replaced the hosted-only startup document with thin local, ChatGPT Work, Codex, and Claude adapters.
-- Added CLAUDE.md importing canonical AGENTS.md.
-- Added a deterministic ChatGPT Work source-pack generator and checked-in current plos-001 export.
-- Added a platform-neutral validator and CLI.
-- Kept GitHub assets as optional CI and collaboration support.
-
-## 2.1.0
-
-- Expanded the validated agency kernel, portfolio registry, and plos-001 capsule into canonical repository paths.
+- Removed private project history, owner identity, personal source material, and historical hosted exports.
+- Replaced the prior project capsule with a neutral uninitialized example capsule.
+- Added first-run seed initialization tooling and README instructions.
+- Made validation and hosted-pack checks project-generic.
+- Retained the portable Agency Kernel, templates, host adapters, and GitHub assets.

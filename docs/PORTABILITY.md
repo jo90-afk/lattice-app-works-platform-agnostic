@@ -2,16 +2,16 @@
 
 ## Canonical rule
 
-The repository is the only canonical state. It consists of an Agency Kernel, one Portfolio Registry, and isolated Project Capsules. Host adapters are intentionally thin: they explain how a host loads or exports that state, but never redefine roles, gates, write domains, Principal authority, or project state.
+The repository is the only canonical state. It consists of an Agency Kernel, one Portfolio Registry, and isolated Project Capsules. Host adapters only explain how a host loads or exports that state; they never redefine roles, gates, write domains, Principal authority, or project state.
 
 ## Supported operation paths
 
 | Path | How it loads Lattice | Persistence boundary |
 | --- | --- | --- |
-| Generic local agent | Open the repository root and read AGENTS.md | The checked-out repository |
+| Generic local agent | Open the repository root and read AGENTS.md | Checked-out repository |
 | Codex | Start in the repository root | Current working tree and AGENTS.md |
 | Claude Code | Start in the repository root | CLAUDE.md importing AGENTS.md, plus working tree |
-| ChatGPT Work | Upload a generated source pack and set project instructions | Uploaded sources are a replaceable snapshot |
+| ChatGPT Work | Upload a generated source pack and set Project instructions | Uploaded sources are a replaceable snapshot |
 | GitHub | Store, review, and validate the repository | Git history and repository files |
 
 ## Adapter constraints
@@ -24,8 +24,8 @@ The repository is the only canonical state. It consists of an Agency Kernel, one
 
 ## Hosted snapshot rule
 
-Some hosted tools cannot open a local folder. Regenerate the pack after substantive repository changes:
+Regenerate the pack after substantive repository changes:
 
-    python3 scripts/lattice.py export-chatgpt-work --project plos-001 --overwrite
+    python3 scripts/lattice.py export-chatgpt-work --project <project-id> --overwrite
 
 The output keeps the Agency Kernel, Portfolio Registry, and selected Project Capsule separately labelled inside one uploadable source file. A hosted agent must return replaceable updates rather than silently treating its chat transcript as durable state.

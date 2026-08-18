@@ -1,56 +1,53 @@
-# Lattice App Works
+# Lattice App Works Seed
 
-Lattice App Works is a pre-alpha, autonomous, multi-project development agency. This repository is a portable operating system for that agency: it carries policy, portfolio state, project capsules, evidence, and host adapters without treating any AI product as the source of truth.
+Lattice App Works is a pre-alpha, multi-project development agency. This repository is a clean seed: it contains the portable agency kernel, a neutral portfolio record, one uninitialized example project, host adapters, and no real person’s project history or seed data.
 
-Repository posture: private by default. The current Personal Life OS capsule contains personal project material. Review every project capsule before making this repository public.
+The repository is structured as three separate layers:
 
-## What is portable
-
-| Layer | Canonical location | Host-specific behavior |
+| Layer | Location | Owns |
 | --- | --- | --- |
-| Agency Kernel | AGENTS.md, agency.yaml, agents/, governance/, templates/ | None; it is platform-neutral |
-| Portfolio Registry | portfolio/ | None; it controls identity, priority, and scheduling |
-| Project Capsules | projects/<project-id>/ | None; each is isolated and carries its own state |
-| Host adapters | adapters/ and CLAUDE.md | Thin launch and export guidance only |
+| Agency Kernel | AGENTS.md, agency.yaml, agents/, governance/, templates/ | Roles, authority, gates, ownership, and escalation |
+| Portfolio Registry | portfolio/ | Principal alias, project IDs, priority, capacity, and scheduling |
+| Project Capsule | projects/<project-id>/ | One project’s mandate, artifacts, evidence, delivery state, and release history |
 
-The current portfolio contains Personal Life OS (plos-001). It is one project capsule, not Lattice's charter.
+The included example-001 capsule is illustrative only. It is not a confirmed mandate, an approved plan, or a real user’s data.
 
-## Start here
+## Initialize the seed before using it
 
-Lattice is an agent operating system, not a web server. Run it by opening this repository with an AI agent that can read Markdown and work in the checked-out folder.
+Choose a non-sensitive Principal alias, a stable project ID, and a project name. From the repository root, run:
+
+    python3 scripts/lattice.py initialize --principal-alias "Repository Owner" --project-id first-project --project-name "First Project"
+
+This replaces the neutral placeholders, renames the example capsule, creates a fresh ChatGPT Work source pack for that project, and marks the seed as initialized. Use an alias rather than a real name if the repository might become public.
+
+Then confirm the fresh project mandate and begin ordinary Lattice work:
 
     python3 scripts/lattice.py validate
     python3 scripts/lattice.py status
 
-Then follow the matching adapter:
+## Use with an AI host
 
-| Environment | Use |
+| Environment | Start |
 | --- | --- |
-| Local / any agent | adapters/local/README.md |
-| Codex | Open this repository as the project root; Codex discovers AGENTS.md. |
-| Claude Code | Open this repository as the project root; CLAUDE.md imports AGENTS.md. |
-| ChatGPT Work | Upload the current source pack from exports/chatgpt-work/plos-001/. |
+| Local / any repository-aware agent | Read AGENTS.md at the repository root. |
+| Codex | Start in the repository root; Codex reads AGENTS.md. |
+| Claude Code | Start in the repository root; CLAUDE.md imports AGENTS.md. |
+| ChatGPT Work | Set the generated Project instructions and upload the generated source pack in exports/chatgpt-work/<project-id>/. |
 
-## Current project state
+See adapters/ for the host-specific startup notes. The adapters do not alter governance; the repository remains the source of truth.
 
-The plos-001 capsule preserves its confirmed bootstrap, Gate 0 evidence, architecture decision AD-001, discovery and acceptance artifacts, work-order history, frozen Gate 1 hashes, the Principal's ACCEPT GATE 1, and the ready Gate 2 state. The portable runtime change does not alter those records.
+## GitHub initialization
 
-## GitHub
-
-GitHub is an optional review and CI host, not the agency runtime. After extracting this folder, create a private repository and push its contents.
+After extracting this folder, create a private GitHub repository and push the initialized repository contents:
 
     git init -b main
     git add -A
-    git commit -m "chore: import Lattice App Works 2.2"
+    git commit -m "chore: initialize Lattice seed"
     git remote add origin https://github.com/<owner>/lattice-app-works.git
     git push -u origin main
 
-For mobile-friendly upload steps and ongoing rules, read docs/REPOSITORY-SETUP.md.
+If a phone Git client uses buttons instead of commands, initialize this extracted folder as a repository, stage every file, make the first commit, connect the empty private GitHub repository as origin, then push main.
 
-## Design rules
+## Seed-data privacy rule
 
-- The kernel never assumes a product, platform, backend, integration, model feature, or default host.
-- Project-specific decisions never become agency policy.
-- Builders, verifiers, reviewers, and Assurance remain separate.
-- Routine remediation is agent-managed; the Principal is engaged only at declared consequence boundaries and for production launch.
-- Platform adapters must be replaceable and may not duplicate or override canonical governance.
+Do not commit real names, contact information, calendars, notes, health data, financial data, addresses, credentials, tokens, or private source material to the seed. Put real project data only in a private project capsule after initialization.
