@@ -1,0 +1,18 @@
+{
+  "adapters": [
+    "local",
+    "chatgpt-work",
+    "codex",
+    "claude"
+  ],
+  "base_export": "Lattice_App_Works_GitHub_Repository_v2.1.0.zip",
+  "base_project_capsule_sha256": "ee5bdf670b0d33261a7687cf013076efc41e7c81106d771de3f83286cb810057",
+  "canonical_layers": [
+    "agency_kernel",
+    "portfolio_registry",
+    "project_capsules"
+  ],
+  "format": "lattice-platform-agnostic-build",
+  "project_state_changed_by_build": false,
+  "version": "2.2.0"
+}

@@ -1,0 +1,44 @@
+name: Agency maintenance proposal
+description: Propose a change to roles, authority, governance, templates, or agency-wide automation.
+title: "[Agency] "
+labels: ["agency-maintenance"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Agency maintenance requires explicit Principal authorization. Project-specific requirements belong in that project capsule instead.
+  - type: textarea
+    id: authorization
+    attributes:
+      label: Principal authorization
+      description: Quote or link the explicit authorization for this agency-level change.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Explain the agency-wide behavior that needs to change.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_change
+    attributes:
+      label: Proposed policy change
+      description: Name the Agency Kernel paths and the effect on authority, evidence, or escalation.
+    validations:
+      required: true
+  - type: textarea
+    id: portfolio_impact
+    attributes:
+      label: Impact on active projects
+      description: Identify any project migration, compatibility, or frozen-evidence impact.
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Boundary confirmation
+      options:
+        - label: This request does not use a current project’s special case as an implicit agency rule.
+          required: true

@@ -1,0 +1,14 @@
+{
+  "format": "lattice-chatgpt-work-source-pack",
+  "pack_file": "Lattice_ChatGPT_Work_Pack_plos-001.md",
+  "pack_sha256": "60d9162a197531684f72d31070526870d1d2bc0022762a600a951459fa10165d",
+  "project_id": "plos-001",
+  "project_instructions_sha256": "511ff6d99f6b80cc5e3cadd7281820d10ea468e9d70b9b00d4c355b6e88ae6b6",
+  "snapshot_rule": "Regenerate after substantive canonical source changes.",
+  "source_layers": [
+    "agency_kernel",
+    "portfolio_registry",
+    "project_capsule"
+  ],
+  "version": "2.2.0"
+}

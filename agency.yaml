@@ -1,0 +1,418 @@
+agency:
+  name: Lattice App Works
+  version: 2.2.0
+  edition: portfolio_autonomous_assurance
+  operating_mode: management_by_exception
+  project_model: isolated_project_capsules
+  platform_selection: per_project
+  operating_principles:
+    - agency_policy_is_separate_from_project_state
+    - one_writer_per_artifact
+    - one_project_namespace_per_work_order
+    - independent_verification
+    - independent_agent_gate_approval
+    - contract_first_parallelism
+    - least_context_and_least_privilege
+    - evidence_before_status
+    - automatic_remediation_before_escalation
+    - principal_control_only_at_consequence_boundaries
+
+portfolio:
+  registry: portfolio/registry.md
+  status: portfolio/status.md
+  decision_records: portfolio/decisions/**
+  project_root_pattern: projects/{project_id}
+  principal_identity_source: portfolio/registry.md
+  rules:
+    - every_project_has_a_unique_stable_id
+    - every_work_order_names_exactly_one_project_id
+    - each_project_has_an_independent_mandate_gate_state_and_release_state
+    - project_artifacts_cannot_override_agency_governance
+    - cross_project_reuse_requires_a_versioned_shared_asset_or_contract
+    - portfolio_priority_controls_scheduling_not_domain_truth
+    - accepted_project_evidence_survives_agency_runtime_upgrades
+  scheduling:
+    max_concurrent_specialist_threads: 3
+    order: principal_priority_then_dependency_readiness_then_age
+    allow_unrelated_projects_to_continue_when_one_is_blocked: true
+
+runtime:
+  model: adapter_neutral_repository
+  canonical_guidance: AGENTS.md
+  adapters:
+    local: adapters/local/
+    chatgpt_work: adapters/chatgpt-work/
+    codex: adapters/codex/
+    claude: adapters/claude/
+  source_precedence:
+    - agency_kernel_for_policy_and_role_authority
+    - portfolio_registry_for_project_identity_priority_and_principal
+    - project_capsule_for_project_mandate_evidence_and_state
+  execution_rules:
+    - resolve_project_id_before_delegation
+    - explicit_role_brief_and_ready_work_order
+    - one_project_capsule_per_specialist
+    - fresh_agent_context_for_independent_verification
+    - assurance_governor_approves_routine_gates
+    - failed_checks_enter_automatic_remediation
+    - principal_is_interrupted_only_by_exception_policy
+    - wait_for_all_required_reviews_before_gate_progression
+    - parallel_writes_only_when_projects_or_paths_are_disjoint_and_inputs_are_frozen
+    - lack_of_tool_or_permission_is_a_blocker_not_evidence
+  immutable_during_delivery:
+    - AGENTS.md
+    - agency.yaml
+    - agents/**
+    - governance/**
+    - templates/**
+    - adapters/**
+principal:
+  kind: human
+  identity_source: portfolio/registry.md
+  involvement: exception_only
+  owns:
+    - initial_or_changed_agency_mandate_or_governance
+    - initial_or_changed_project_mandate
+    - cross_project_priority_or_capacity_tradeoffs
+    - project_priority_or_release_scope_tradeoffs
+    - new_paid_commitments
+    - new_or_changed_sensitive_data_policy
+    - destructive_or_irreversible_actions
+    - externally_visible_person_or_service_actions
+    - material_residual_risk_acceptance
+    - production_launch_or_distribution
+  not_required_for:
+    - project_intake_fidelity_inside_confirmed_mandate
+    - routine_product_detail_inside_approved_scope
+    - experience_approval
+    - architecture_approval_inside_approved_cost_and_data_boundaries
+    - test_design_approval
+    - implementation_acceptance
+    - defect_triage_or_remediation
+    - test_environment_promotion
+    - production_readiness_certification
+    - low_severity_quality_security_or_operational_debt
+
+roles:
+  director:
+    prompt: agents/director.md
+    writes:
+      - portfolio/**
+      - projects/{project_id}/work/**
+      - projects/{project_id}/status/**
+    must_not:
+      - author_domain_deliverables
+      - edit_production_code
+      - verify_or_approve_domain_work
+      - override_assurance_or_blocking_verdicts
+      - move_evidence_between_projects
+  product:
+    prompt: agents/product.md
+    writes:
+      - projects/{project_id}/product/**
+    must_not:
+      - define_technical_architecture
+      - edit_design_or_code
+      - approve_own_requirements
+  experience:
+    prompt: agents/experience.md
+    writes:
+      - projects/{project_id}/design/**
+    must_not:
+      - reprioritize_scope
+      - define_service_contracts
+      - edit_production_code
+  architecture:
+    prompt: agents/architecture.md
+    writes:
+      - projects/{project_id}/architecture/**
+      - projects/{project_id}/contracts/**
+    must_not:
+      - reprioritize_product_scope
+      - implement_features
+      - approve_own_architecture
+  android:
+    prompt: agents/android.md
+    activation: when_project_manifest_requires_android
+    writes:
+      - projects/{project_id}/platform/android/**
+      - projects/{project_id}/tests/android-unit/**
+    must_not:
+      - edit_contracts_or_requirements
+      - implement_server_or_model_components
+      - certify_acceptance_or_release
+  services:
+    prompt: agents/services.md
+    activation: when_project_manifest_requires_services
+    writes:
+      - projects/{project_id}/services/**
+      - projects/{project_id}/tests/service-unit/**
+    must_not:
+      - edit_client_or_intelligence_components
+      - edit_contracts_or_requirements
+      - certify_acceptance_or_release
+  intelligence:
+    prompt: agents/intelligence.md
+    activation: when_project_manifest_requires_ai_behavior
+    writes:
+      - projects/{project_id}/intelligence/**
+      - projects/{project_id}/tests/ai-evals/**
+    must_not:
+      - implement_general_backend_or_client_ui
+      - set_product_policy
+      - certify_own_evaluations
+  quality:
+    prompt: agents/quality.md
+    writes:
+      - projects/{project_id}/quality/**
+      - projects/{project_id}/tests/acceptance/**
+      - projects/{project_id}/tests/e2e/**
+    must_not:
+      - edit_production_code
+      - weaken_acceptance_criteria
+      - approve_own_test_design
+      - approve_gate_progression
+  security:
+    prompt: agents/security.md
+    writes:
+      - projects/{project_id}/security/**
+      - projects/{project_id}/tests/security/**
+    must_not:
+      - implement_reviewed_features
+      - silently_accept_material_residual_risk
+      - expose_secrets_or_sensitive_data
+      - approve_gate_progression
+  release:
+    prompt: agents/release.md
+    writes:
+      - projects/{project_id}/ops/**
+      - projects/{project_id}/infra/**
+      - projects/{project_id}/.github/**
+    must_not:
+      - edit_business_logic
+      - override_blocking_verdicts
+      - authorize_production_launch
+  assurance:
+    prompt: agents/assurance.md
+    writes:
+      - projects/{project_id}/assurance/**
+    must_not:
+      - author_or_modify_domain_deliverables
+      - write_or_weaken_tests
+      - perform_the_primary_verification_it_approves
+      - override_a_required_blocking_verdict
+      - accept_material_residual_risk
+      - authorize_production_launch
+
+gates:
+  bootstrap:
+    type: principal_mandate_authorization
+    frequency: once_per_project_or_project_mandate_change
+    author: principal
+    recorder: director
+    verifier: principal
+    approver: principal
+    artifacts:
+      - projects/{project_id}/work/bootstrap.md
+  intake:
+    author: director
+    verifier: product
+    approver: assurance
+    artifacts:
+      - projects/{project_id}/work/intake.md
+  intent:
+    author: product
+    verifier: experience
+    mandatory_reviewers:
+      - quality_for_acceptance_testability
+    approver: assurance
+    artifacts:
+      - projects/{project_id}/product/project-brief.md
+      - projects/{project_id}/product/acceptance-map.md
+  experience:
+    author: experience
+    verifier: quality
+    mandatory_reviewers:
+      - product_for_intent_traceability
+    approver: assurance
+    artifacts:
+      - projects/{project_id}/design/journeys.md
+      - projects/{project_id}/design/state-matrix.md
+      - projects/{project_id}/design/accessibility.md
+  architecture:
+    author: architecture
+    verifier: security
+    mandatory_reviewers:
+      - activated_builders_for_feasibility
+      - quality_for_verifiability
+    approver: assurance
+    artifacts:
+      - projects/{project_id}/architecture/system.md
+      - projects/{project_id}/architecture/decisions/**
+      - projects/{project_id}/contracts/**
+  test_design:
+    author: quality
+    verifier: product
+    mandatory_reviewers:
+      - experience_for_state_coverage
+      - security_for_risk_coverage
+    approver: assurance
+    artifacts:
+      - projects/{project_id}/quality/test-strategy.md
+      - projects/{project_id}/quality/traceability.md
+      - projects/{project_id}/tests/acceptance/**
+  implementation:
+    authors: activated_builders_from_project_manifest
+    verifier: quality
+    mandatory_reviewers:
+      - security_when_risk_triggered
+    approver: assurance
+  convergence:
+    evidence_owners:
+      - quality
+      - security
+      - release
+    approver: assurance
+  release_readiness:
+    author: release
+    verifier: quality
+    mandatory_reviewers:
+      - security
+    approver: assurance
+  launch:
+    prerequisite: assurance_release_readiness_accept
+    authorizer: principal
+  learn:
+    author: product
+    verifier: quality
+    mandatory_reviewers:
+      - experience
+      - release
+    approver: assurance
+
+assurance_council:
+  chair: assurance
+  standing_evidence_roles:
+    - quality
+  conditional_evidence_roles:
+    - security_when_data_privacy_security_or_abuse_is_affected
+    - release_when_build_environment_migration_or_operations_is_affected
+    - product_when_acceptance_or_scope_interpretation_is_affected
+    - architecture_when_contract_or_nonfunctional_behavior_is_affected
+  rules:
+    - no_author_reviews_or_approves_own_output
+    - assurance_decides_process_progression_not_domain_truth
+    - all_required_evidence_must_be_present_in_the_same_project_capsule
+    - any_required_block_forces_remediation_or_escalation
+    - low_severity_debt_requires_owner_due_condition_and_regression_guard
+  outcomes:
+    - ACCEPT
+    - ACCEPT_WITH_DEBT
+    - REMEDIATE
+    - ESCALATE
+
+qa_loop:
+  owner: quality
+  orchestrator: director
+  approver: assurance
+  sequence:
+    - quality_runs_traceable_verification
+    - quality_records_reproducible_findings_and_severity
+    - director_issues_remediation_to_artifact_owner
+    - fresh_quality_thread_retests_target_and_affected_regression
+    - assurance_reassesses_gate_from_new_evidence
+  standard_remediation_cycles: 2
+  diagnostic_cycle_after_standard_failure:
+    - architecture_performs_root_cause_review
+    - quality_defines_smallest_decisive_reproduction
+    - owner_attempts_one_final_targeted_remediation
+  max_total_cycles: 3
+  exhaustion_behavior:
+    - mark_internal_project_block_with_evidence
+    - continue_all_unblocked_work_across_the_portfolio
+    - interrupt_principal_only_if_exception_policy_matches_or_critical_path_requires_retained_decision
+
+escalation_policy:
+  mode: management_by_exception
+  interrupt_principal_only_when:
+    - agency_mandate_or_governance_would_change
+    - a_new_project_mandate_or_existing_project_mandate_would_change
+    - cross_project_priority_or_capacity_requires_a_human_tradeoff
+    - project_priority_or_release_scope_would_change
+    - a_new_paid_commitment_is_required
+    - sensitive_data_collection_sync_sharing_backup_ai_processing_or_retention_policy_would_change
+    - a_destructive_or_irreversible_action_is_required
+    - an_action_would_affect_another_person_or_external_service
+    - material_residual_privacy_security_legal_or_operational_risk_requires_acceptance
+    - production_launch_or_distribution_is_ready_for_authorization
+    - two_valid_domain_positions_remain_incompatible_and_only_principal_owned_intent_can_resolve_them
+  do_not_interrupt_for:
+    - ordinary_gate_approval
+    - routine_product_design_or_technical_detail_inside_confirmed_scope
+    - routine_scheduling_inside_recorded_portfolio_priority
+    - minor_or_major_defect_triage
+    - remediation_and_retesting
+    - selection_between_reversible_no_cost_development_options
+    - low_severity_debt_with_a_named_owner_and_guard
+    - test_environment_promotion
+    - status_acknowledgement
+  packet:
+    template: templates/principal-decision-packet.md
+    batching: combine_all_current_principal_decisions_when_safe
+    required_fields:
+      - project_id_or_agency_scope
+      - exact_decision
+      - why_agent_authority_ends
+      - options_and_consequences
+      - agency_recommendation
+      - safe_work_continuing_while_waiting
+
+handoff:
+  template: templates/handoff.md
+  recording_owner: director
+  record_path: projects/{project_id}/work/handoffs/**
+  required_fields:
+    - project_id
+    - work_order
+    - status
+    - artifacts
+    - input_versions
+    - decisions_and_assumptions
+    - validation_evidence
+    - risks_and_limitations
+    - requested_next_action
+
+verification:
+  template: templates/verification.md
+  recording_owner: director
+  record_path: projects/{project_id}/work/verifications/**
+  primary_outcomes:
+    - SATISFIED
+    - NOT_SATISFIED
+  mandatory_review_outcomes:
+    - CONCUR
+    - BLOCK
+  gate_rule: primary_must_be_satisfied_and_all_mandatory_reviews_must_concur
+
+gate_decision:
+  template: templates/gate-decision.md
+  decision_owner: assurance
+  recording_owner: director
+  record_path: projects/{project_id}/work/gate-decisions/**
+  routine_outcomes:
+    - ACCEPT
+    - ACCEPT_WITH_DEBT
+    - REMEDIATE
+    - ESCALATE
+  acceptance_rule: assurance_accepts_only_complete_independent_evidence_from_the_same_project
+  launch_exception: principal_authorizes_production_launch_after_assurance_accepts_release_readiness
+
+change_control:
+  template: templates/change-request.md
+  rules:
+    - upstream_artifacts_are_never_silently_rewritten
+    - contract_changes_require_architect_version_bump
+    - requirement_changes_require_product_version_bump
+    - changes_inside_confirmed_project_mandate_are_agent_decided
+    - project_or_agency_consequence_boundary_changes_require_principal_decision
+    - project_change_requests_cannot_mutate_the_agency_kernel
