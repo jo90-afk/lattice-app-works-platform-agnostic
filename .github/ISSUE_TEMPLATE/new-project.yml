@@ -1,0 +1,51 @@
+name: New project intake
+description: Propose a separately governed project for the Lattice portfolio.
+title: "[Project] "
+labels: ["project-intake"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A new project receives its own stable ID and isolated capsule. Do not use this form to change agency policy.
+  - type: input
+    id: project_name
+    attributes:
+      label: Project name
+      description: A plain-language working name.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Intended outcome
+      description: Describe the smallest coherent value the project should create.
+    validations:
+      required: true
+  - type: textarea
+    id: users
+    attributes:
+      label: Users and context
+      description: Identify the intended users and the situation in which they would use it.
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Known constraints
+      description: Include data, privacy, platform, cost, timeline, integration, and release constraints.
+    validations:
+      required: true
+  - type: textarea
+    id: consequence_boundaries
+    attributes:
+      label: Consequence boundaries
+      description: Identify spending, sensitive-data, external-action, destructive-action, and launch decisions.
+    validations:
+      required: true
+  - type: checkboxes
+    id: separation
+    attributes:
+      label: Separation confirmation
+      options:
+        - label: I understand that this request creates a project capsule and does not alter the Agency Kernel.
+          required: true

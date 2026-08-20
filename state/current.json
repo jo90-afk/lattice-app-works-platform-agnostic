@@ -1,0 +1,41 @@
+{
+  "agency_version": "0.0.3",
+  "ephemeral_state_excluded": [
+    "leases"
+  ],
+  "exported_at": "1970-01-01T00:00:00Z",
+  "format": "lattice-state-snapshot",
+  "revision": 0,
+  "schema_version": 1,
+  "tables": {
+    "commitments": [],
+    "condition_dependencies": [],
+    "condition_inputs": [],
+    "condition_reviewers": [],
+    "condition_truths": [],
+    "conditions": [],
+    "events": [],
+    "evidence": [],
+    "exceptions": [],
+    "milestones": [],
+    "objectives": [],
+    "projects": [
+      {
+        "created_at": "1970-01-01T00:00:00Z",
+        "id": "example-001",
+        "max_wip": 3,
+        "name": "<PROJECT_NAME>",
+        "status": "paused",
+        "updated_at": "1970-01-01T00:00:00Z"
+      }
+    ],
+    "record_versions": [],
+    "records": [],
+    "reviews": [],
+    "submissions": [],
+    "truth_links": [],
+    "truth_transitions": [],
+    "truth_versions": [],
+    "truths": []
+  }
+}

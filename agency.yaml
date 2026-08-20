@@ -1,0 +1,285 @@
+agency:
+  name: Lattice App Works
+  version: 0.0.3
+  edition: active_frontier_truth_ledger
+  operating_mode: reactive_management_by_exception
+  project_model: isolated_project_capsules
+  platform_selection: per_project
+  operating_principles:
+    - persist_state_not_speculative_tasks
+    - derive_actions_from_current_conditions
+    - no_agent_created_backlog
+    - one_active_objective_and_milestone_per_project
+    - bounded_work_in_progress
+    - independent_verification
+    - truth_is_versioned_never_silently_replaced
+    - background_truth_is_recalled_only_by_relevance
+    - evidence_before_readiness
+    - principal_control_only_at_consequence_boundaries
+
+state:
+  portable_snapshot: state/current.json
+  local_index: .lattice/state.db
+  schema: runtime/schema.sql
+  policy: runtime/policy.json
+  writer: guarded_cli_only
+  mutation_entrypoint: python3 scripts/lattice.py
+  durable_entities:
+    - projects
+    - objectives
+    - milestones
+    - requirements_constraints_decisions_and_artifact_records
+    - versioned_truths_and_attention_transitions
+    - readiness_conditions_and_dependencies
+    - submissions_reviews_and_evidence
+    - commitments_exceptions_and_events
+  derived_entities:
+    - active_frontier_actions
+    - review_assignments
+    - milestone_readiness
+    - impact_context
+    - remediation_candidates
+  ephemeral_entities:
+    - action_leases
+    - execution_briefs
+    - agent_plans
+  direct_edit_prohibited:
+    - state/current.json
+    - .lattice/state.db
+
+portfolio:
+  registry: portfolio/registry.md
+  status: portfolio/status.md
+  project_root_pattern: projects/{project_id}
+  principal_identity_source: portfolio/registry.md
+  scheduling:
+    max_concurrent_specialist_threads: 3
+    one_active_objective_per_project: true
+    one_active_milestone_per_project: true
+    role_wip: 1
+    order: principal_priority_then_readiness_then_risk_then_age
+    inactive_projects_generate_no_frontier_actions: true
+  rules:
+    - every_project_has_a_unique_stable_id
+    - every_state_entity_names_exactly_one_project_id
+    - project_artifacts_cannot_override_agency_governance
+    - cross_project_reuse_requires_a_versioned_shared_asset_or_contract
+    - portfolio_priority_controls_scheduling_not_domain_truth
+
+runtime:
+  model: adapter_neutral_repository
+  canonical_guidance: AGENTS.md
+  adapters:
+    local: adapters/local/
+    chatgpt_work: adapters/chatgpt-work/
+    codex: adapters/codex/
+    claude: adapters/claude/
+  execution_rules:
+    - query_the_active_frontier_instead_of_creating_work_orders
+    - claim_one_action_with_an_expiring_lease
+    - compile_context_from_only_linked_records_truths_dependencies_and_recent_failures
+    - submit_results_to_independent_review
+    - recompute_readiness_after_every_durable_mutation
+    - promote_only_failed_or_externally_binding_work_to_exceptions_or_commitments
+    - principal_is_interrupted_only_by_exception_policy
+    - lack_of_tool_or_permission_is_a_blocker_not_evidence
+    - parallel_writes_require_disjoint_paths_and_separate_leases
+  immutable_during_project_delivery:
+    - AGENTS.md
+    - agency.yaml
+    - agents/**
+    - governance/**
+    - runtime/**
+    - adapters/**
+
+principal:
+  kind: human
+  identity_source: portfolio/registry.md
+  involvement: exception_only
+  owns:
+    - initial_or_changed_agency_mandate_or_governance
+    - initial_or_changed_project_mandate
+    - cross_project_priority_or_capacity_tradeoffs
+    - new_paid_commitments
+    - new_or_changed_sensitive_data_policy
+    - destructive_or_irreversible_actions
+    - externally_visible_person_or_service_actions
+    - material_residual_risk_acceptance
+    - production_launch_or_distribution
+  not_required_for:
+    - routine_product_and_technical_detail_inside_a_confirmed_mandate
+    - active_frontier_selection_inside_recorded_priority
+    - verification_and_remediation
+    - milestone_readiness_assessment
+    - low_severity_quality_security_or_operational_debt
+
+roles:
+  director:
+    prompt: agents/director.md
+    writes:
+      - portfolio/**
+      - projects/{project_id}/project/**
+      - projects/{project_id}/sources/principal/**
+    must_not:
+      - create_speculative_backlogs
+      - author_domain_deliverables
+      - edit_production_code
+      - verify_or_approve_domain_work
+      - directly_edit_operational_state_files
+  product:
+    prompt: agents/product.md
+    writes:
+      - projects/{project_id}/product/**
+    must_not:
+      - define_technical_architecture
+      - edit_design_or_code
+      - approve_own_requirements
+  experience:
+    prompt: agents/experience.md
+    writes:
+      - projects/{project_id}/design/**
+    must_not:
+      - reprioritize_scope
+      - define_service_contracts
+      - edit_production_code
+  architecture:
+    prompt: agents/architecture.md
+    writes:
+      - projects/{project_id}/architecture/**
+      - projects/{project_id}/contracts/**
+    must_not:
+      - reprioritize_product_scope
+      - implement_features
+      - approve_own_architecture
+  android:
+    prompt: agents/android.md
+    activation: when_project_manifest_requires_android
+    writes:
+      - projects/{project_id}/platform/android/**
+      - projects/{project_id}/tests/android-unit/**
+    must_not:
+      - edit_contracts_or_requirements
+      - implement_server_or_model_components
+      - certify_own_output
+  services:
+    prompt: agents/services.md
+    activation: when_project_manifest_requires_services
+    writes:
+      - projects/{project_id}/services/**
+      - projects/{project_id}/tests/service-unit/**
+    must_not:
+      - edit_client_or_intelligence_components
+      - edit_contracts_or_requirements
+      - certify_own_output
+  intelligence:
+    prompt: agents/intelligence.md
+    activation: when_project_manifest_requires_ai_behavior
+    writes:
+      - projects/{project_id}/intelligence/**
+      - projects/{project_id}/tests/ai-evals/**
+    must_not:
+      - implement_general_backend_or_client_ui
+      - set_product_policy
+      - certify_own_evaluations
+  quality:
+    prompt: agents/quality.md
+    writes:
+      - projects/{project_id}/quality/**
+      - projects/{project_id}/tests/acceptance/**
+      - projects/{project_id}/tests/e2e/**
+    must_not:
+      - edit_production_code
+      - weaken_acceptance_criteria
+      - approve_own_test_design
+  security:
+    prompt: agents/security.md
+    writes:
+      - projects/{project_id}/security/**
+      - projects/{project_id}/tests/security/**
+    must_not:
+      - implement_reviewed_features
+      - silently_accept_material_residual_risk
+      - expose_secrets_or_sensitive_data
+  release:
+    prompt: agents/release.md
+    writes:
+      - projects/{project_id}/ops/**
+      - projects/{project_id}/infra/**
+      - projects/{project_id}/.github/**
+    must_not:
+      - edit_business_logic
+      - suppress_failed_readiness_conditions
+      - authorize_production_launch
+  assurance:
+    prompt: agents/assurance.md
+    writes:
+      - projects/{project_id}/assurance/**
+    must_not:
+      - author_or_modify_domain_deliverables
+      - write_or_weaken_tests
+      - perform_the_primary_verification_it_relies_on
+      - accept_material_residual_risk
+      - authorize_production_launch
+
+readiness:
+  unit: milestone_condition
+  condition_states:
+    - unknown
+    - unmet
+    - candidate
+    - satisfied
+    - blocked
+    - waived
+  submission_flow:
+    - owner_claims_derived_condition_action
+    - owner_submits_changed_artifacts_and_evidence
+    - verifier_and_mandatory_reviewers_receive_derived_review_actions
+    - any_negative_verdict_returns_the_condition_to_remediation
+    - all_required_positive_verdicts_satisfy_the_condition
+  milestone_rule: all_conditions_satisfied_or_waived_and_no_blocking_exception_or_commitment
+  milestone_advancer: assurance
+  production_launch_authorizer: principal
+
+truth_ledger:
+  scope: per_project
+  epistemic_states:
+    - observed
+    - accepted
+    - contested
+    - false
+    - superseded
+    - unknown
+  attention_states:
+    - frontier
+    - background
+    - archived
+  relations:
+    - supports
+    - contradicts
+    - refines
+    - depends_on
+    - supersedes
+  rules:
+    - changing_attention_never_deletes_or_rewrites_truth_history
+    - background_truth_is_omitted_from_routine_context_unless_explicitly_linked
+    - contradiction_reactivates_both_truths_to_frontier_and_marks_them_contested
+    - material_truth_revision_invalidates_linked_active_conditions
+    - accepting_a_milestone_moves_settled_unreferenced_truths_to_background
+
+failure_control:
+  default_retry_budget: 3
+  before_budget_exhaustion: return_condition_to_frontier_with_new_state_version
+  after_budget_exhaustion: create_one_deduplicated_exception_and_block_the_condition
+  ordinary_agents_may_not_create_commitments: true
+  durable_commitment_creators:
+    - director
+    - principal
+
+principal_exception_predicates:
+  - mandate_or_priority_change
+  - new_paid_commitment
+  - sensitive_data_policy_change
+  - destructive_or_irreversible_action
+  - externally_consequential_action
+  - material_residual_risk
+  - production_launch

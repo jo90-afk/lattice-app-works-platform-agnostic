@@ -1,0 +1,19 @@
+name: Validate Lattice Active Frontier
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate repository and state contract
+        run: python3 scripts/lattice.py validate
+      - name: Run state-engine tests
+        run: python3 -m unittest discover -s tests -v

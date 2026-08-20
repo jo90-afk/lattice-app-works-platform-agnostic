@@ -1,0 +1,13 @@
+{
+  "contains_real_personal_data": false,
+  "example_project_id": "example-001",
+  "format": "lattice-active-frontier-sanitized-seed",
+  "initialized": false,
+  "required_before_delivery": [
+    "initialize_seed",
+    "confirm_project_mandate",
+    "validate"
+  ],
+  "operational_state": "state/current.json",
+  "version": "0.0.3"
+}

@@ -1,0 +1,49 @@
+name: Delivery defect or evidence gap
+description: Report a reproducible defect, missing evidence item, or governance violation within one project.
+title: "[Defect] "
+labels: ["defect"]
+body:
+  - type: input
+    id: project_id
+    attributes:
+      label: Project ID
+      description: Use the stable ID from portfolio/registry.md.
+    validations:
+      required: true
+  - type: input
+    id: affected_path
+    attributes:
+      label: Affected path or work order
+      description: Name the project-relative artifact, work order, or gate.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior or evidence
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior or missing evidence
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction or proof
+      description: Include safe, non-sensitive steps or the evidence gap.
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Blocker
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true

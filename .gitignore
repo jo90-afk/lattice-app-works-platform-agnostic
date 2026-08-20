@@ -1,0 +1,43 @@
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+secrets/
+**/secrets/
+
+# Local operating-system and editor files
+.DS_Store
+Thumbs.db
+/.lattice/
+/exports/chatgpt-work/*/
+!/exports/chatgpt-work/README.md
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Generated logs and local test output
+*.log
+coverage/
+dist/
+build/
+.pytest_cache/
+__pycache__/
+
+# Local project runtime state that is not an accepted, reviewable artifact
+projects/*/local/
+projects/*/tmp/
+
+# Local agent preferences and Python cache
+CLAUDE.local.md
+.codex/local/
+.claude/local/
+__pycache__/
+*.pyc

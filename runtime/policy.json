@@ -1,0 +1,49 @@
+{
+  "agency_version": "0.0.3",
+  "schema_version": 1,
+  "default_frontier_limit": 3,
+  "default_lease_minutes": 60,
+  "default_project_wip": 3,
+  "default_retry_budget": 3,
+  "role_wip": 1,
+  "roles": [
+    "director",
+    "product",
+    "experience",
+    "architecture",
+    "android",
+    "services",
+    "intelligence",
+    "quality",
+    "security",
+    "release",
+    "assurance",
+    "principal"
+  ],
+  "condition_creators": [
+    "director",
+    "product",
+    "architecture",
+    "quality",
+    "security",
+    "assurance"
+  ],
+  "commitment_creators": [
+    "director",
+    "principal"
+  ],
+  "milestone_advancer": "assurance",
+  "truth_attention_states": [
+    "frontier",
+    "background",
+    "archived"
+  ],
+  "truth_epistemic_states": [
+    "observed",
+    "accepted",
+    "contested",
+    "false",
+    "superseded",
+    "unknown"
+  ]
+}

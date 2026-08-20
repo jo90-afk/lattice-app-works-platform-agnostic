@@ -1,0 +1,14 @@
+# Copy this file to .github/CODEOWNERS and replace @YOUR_GITHUB_USERNAME.
+
+* @YOUR_GITHUB_USERNAME
+
+# Agency Kernel
+/AGENTS.md @YOUR_GITHUB_USERNAME
+/agency.yaml @YOUR_GITHUB_USERNAME
+/agents/ @YOUR_GITHUB_USERNAME
+/governance/ @YOUR_GITHUB_USERNAME
+/templates/ @YOUR_GITHUB_USERNAME
+
+# Portfolio and project state
+/portfolio/ @YOUR_GITHUB_USERNAME
+/projects/ @YOUR_GITHUB_USERNAME
