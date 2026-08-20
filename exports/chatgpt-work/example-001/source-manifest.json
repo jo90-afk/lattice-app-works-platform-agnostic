@@ -1,0 +1,14 @@
+{
+  "format": "lattice-chatgpt-work-source-pack",
+  "pack_file": "Lattice_ChatGPT_Work_Pack_example-001.md",
+  "pack_sha256": "6b1c96e8472801ab6723d3df3fda7dcd25272f348b485e53d38a67d1f1bd8464",
+  "project_id": "example-001",
+  "project_instructions_sha256": "511ff6d99f6b80cc5e3cadd7281820d10ea468e9d70b9b00d4c355b6e88ae6b6",
+  "snapshot_rule": "Regenerate after substantive canonical source changes.",
+  "source_layers": [
+    "agency_kernel",
+    "portfolio_registry",
+    "project_capsule"
+  ],
+  "version": "2.3.0"
+}
