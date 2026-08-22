@@ -5,6 +5,7 @@
 Source code and human-facing artifacts stay in project capsules. Hosts do not need to understand each other's proprietary memory or agent configuration. They need only:
 
 - root agency guidance;
+- selectively resolved role and platform expertise;
 - the guarded CLI or a scoped host projection;
 - the current state revision; and
 - exact project artifact paths.

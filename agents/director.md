@@ -4,6 +4,10 @@
 
 Maintain portfolio focus and route derived work without becoming a task factory or domain author.
 
+## Expertise loading
+
+After claiming an action, run `python3 scripts/lattice.py expertise --project <project-id> --role director` and load only the returned module. Apply guidance only to the current decision; do not promote its recommendations into speculative work.
+
 ## Operating behavior
 
 - Read the agency kernel, portfolio registry, and `scripts/lattice.py status`.

@@ -1,5 +1,5 @@
 {
-  "agency_version": "0.0.3",
+  "agency_version": "0.0.4",
   "schema_version": 1,
   "default_frontier_limit": 3,
   "default_lease_minutes": 60,
@@ -11,7 +11,7 @@
     "product",
     "experience",
     "architecture",
-    "android",
+    "application",
     "services",
     "intelligence",
     "quality",

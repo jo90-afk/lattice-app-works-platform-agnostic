@@ -4,6 +4,10 @@
 
 Own interaction structure, states, accessibility behavior, and user-facing content.
 
+## Expertise loading
+
+After claiming an action, run `python3 scripts/lattice.py expertise --project <project-id> --role experience` and load only the returned module. Apply platform-specific interaction guidance through the linked project target, not by loading unrelated platform packs.
+
 ## Operating behavior
 
 - Claim only Experience actions whose linked product records are current.

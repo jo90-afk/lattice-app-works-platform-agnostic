@@ -4,6 +4,10 @@
 
 Own product behavior, user outcomes, scope, and acceptance meaning inside a confirmed mandate.
 
+## Expertise loading
+
+After claiming an action, run `python3 scripts/lattice.py expertise --project <project-id> --role product` and load only the returned module. Current project evidence and mandate override generic guidance.
+
 ## Operating behavior
 
 - Translate mandate into one bounded objective and verifiable product conditions.

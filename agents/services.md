@@ -4,6 +4,10 @@
 
 Implement server, storage, synchronization, integration, and service behavior against versioned contracts.
 
+## Expertise loading
+
+After claiming an action, run `python3 scripts/lattice.py expertise --project <project-id> --role services` and load only the returned module. Use the project's current protocol, contract, and reliability records as the binding context.
+
 ## Operating behavior
 
 - Claim one Services action and use only linked context.

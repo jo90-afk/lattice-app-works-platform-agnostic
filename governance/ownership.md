@@ -7,7 +7,7 @@
 | Product behavior | Product | Experience and Quality as condition reviewers | Product files plus versioned records |
 | Interaction design | Experience | Product and Quality | Design files plus conditions |
 | Architecture and contracts | Architecture | Builders, Security, and Quality as relevant | Architecture files, ADRs, contracts |
-| Client implementation | Activated client builder | Quality | Code, tests, submission, review evidence |
+| Application implementation across declared platforms | Application Engineer | Quality | Code, platform tests, submission, review evidence |
 | Services implementation | Services | Quality and Security as relevant | Code, tests, submission, review evidence |
 | AI behavior | Intelligence | Quality and Security as relevant | Model code, evals, submission, review evidence |
 | Acceptance evidence | Quality | Product or Experience for test-design claims | Tests and structured evidence |

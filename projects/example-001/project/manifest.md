@@ -9,7 +9,7 @@ To be confirmed by the Principal during bootstrap.
 
 ## Activation
 
-Activate platforms, services, intelligence, integrations, and release environments only when accepted requirements require them. This seed selects none by default.
+Activate platforms, services, intelligence, integrations, and release environments only when accepted requirements require them. This seed selects none by default. Keep the machine-readable selection in `project/capabilities.json`; platform identifiers are open-ended.
 
 ## Data boundary
 

@@ -35,6 +35,9 @@ class SeedInitializationTest(unittest.TestCase):
             initialized = subprocess.run(command, cwd=target, text=True, capture_output=True)
             self.assertEqual(initialized.returncode, 0, initialized.stderr + initialized.stdout)
             self.assertTrue((target / "projects" / "sample-001" / "PROJECT.md").is_file())
+            self.assertTrue(
+                (target / "projects" / "sample-001" / "project" / "capabilities.json").is_file()
+            )
             self.assertFalse((target / "projects" / "example-001").exists())
             snapshot = json.loads((target / "state" / "current.json").read_text(encoding="utf-8"))
             self.assertEqual(snapshot["tables"]["projects"][0]["id"], "sample-001")
@@ -54,6 +57,9 @@ class SeedInitializationTest(unittest.TestCase):
             )
             self.assertEqual(created.returncode, 0, created.stderr + created.stdout)
             self.assertTrue((target / "projects" / "second-001" / "PROJECT.md").is_file())
+            self.assertTrue(
+                (target / "projects" / "second-001" / "project" / "capabilities.json").is_file()
+            )
             snapshot = json.loads((target / "state" / "current.json").read_text(encoding="utf-8"))
             projects = {row["id"]: row for row in snapshot["tables"]["projects"]}
             self.assertEqual(projects["second-001"]["status"], "paused")

@@ -62,17 +62,17 @@ class StateEngineTest(unittest.TestCase):
         self.store.add_condition(
             "project-001", "objective-001", "milestone-001", "condition.core",
             "Core behavior is verified", "Implement the behavior and retain decisive evidence.",
-            "android", "quality", "director", priority=80, severity="major",
+            "application", "quality", "director", priority=80, severity="major",
             attempt_budget=attempt_budget, input_record_ids=[record_id], truth_ids=[truth_id],
             condition_id="condition-001",
         )
 
     def satisfy_condition(self) -> None:
-        action = self.store.frontier("project-001", "android")[0]
-        lease = self.store.claim("project-001", "android", "builder-1", action["action_key"])
+        action = self.store.frontier("project-001", "application")[0]
+        lease = self.store.claim("project-001", "application", "builder-1", action["action_key"])
         self.store.submit(
-            lease["lease_id"], "android", "Implemented and tested.",
-            ["projects/project-001/platform/android/feature.kt"], "test-output.txt",
+            lease["lease_id"], "application", "Implemented and tested.",
+            ["projects/project-001/platform/web/feature.ts"], "test-output.txt",
         )
         review_action = self.store.frontier("project-001", "quality")[0]
         review_lease = self.store.claim(
@@ -89,20 +89,20 @@ class StateEngineTest(unittest.TestCase):
         self.assertEqual(truth["attention_state"], "frontier")
         self.assertEqual(truth["transitions"][-1]["from_attention"], "background")
 
-        action = self.store.frontier("project-001", "android")[0]
+        action = self.store.frontier("project-001", "application")[0]
         record_ids = [item["id"] for item in action["context"]["relevant_records"]]
         self.assertEqual(record_ids, ["record-001"])
         self.assertNotIn("record-unrelated", json.dumps(action))
 
-        lease = self.store.claim("project-001", "android", "builder-1", action["action_key"])
+        lease = self.store.claim("project-001", "application", "builder-1", action["action_key"])
         with self.assertRaises(LatticeError):
-            self.store.claim("project-001", "android", "builder-2")
+            self.store.claim("project-001", "application", "builder-2")
         self.store.submit(
-            lease["lease_id"], "android", "Implemented and tested.",
-            ["projects/project-001/platform/android/feature.kt"], "test-output.txt",
+            lease["lease_id"], "application", "Implemented and tested.",
+            ["projects/project-001/platform/web/feature.ts"], "test-output.txt",
         )
 
-        self.assertEqual(self.store.frontier("project-001", "android"), [])
+        self.assertEqual(self.store.frontier("project-001", "application"), [])
         review_action = self.store.frontier("project-001", "quality")[0]
         review_lease = self.store.claim(
             "project-001", "quality", "reviewer-1", review_action["action_key"]
@@ -144,20 +144,20 @@ class StateEngineTest(unittest.TestCase):
         ).fetchone()
         self.assertEqual(condition["status"], "unknown")
         self.assertEqual(condition["attempt_count"], 0)
-        self.assertEqual(len(self.store.frontier("project-001", "android")), 1)
+        self.assertEqual(len(self.store.frontier("project-001", "application")), 1)
 
     def test_retry_budget_promotes_one_exception_without_a_backlog(self) -> None:
         self.add_condition(attempt_budget=2)
         for attempt in range(2):
-            action = self.store.frontier("project-001", "android")[0]
+            action = self.store.frontier("project-001", "application")[0]
             lease = self.store.claim(
-                "project-001", "android", "builder-1", action["action_key"]
+                "project-001", "application", "builder-1", action["action_key"]
             )
             result = self.store.fail_action(
-                lease["lease_id"], "android", f"Attempt {attempt + 1} could not satisfy the condition."
+                lease["lease_id"], "application", f"Attempt {attempt + 1} could not satisfy the condition."
             )
         self.assertTrue(result["blocked"])
-        self.assertEqual(self.store.frontier("project-001", "android"), [])
+        self.assertEqual(self.store.frontier("project-001", "application"), [])
         exceptions = self.store.conn.execute(
             "SELECT * FROM exceptions WHERE project_id = 'project-001' AND status = 'open'"
         ).fetchall()
@@ -187,8 +187,8 @@ class StateEngineTest(unittest.TestCase):
 
     def test_snapshot_round_trip_excludes_leases(self) -> None:
         self.add_condition()
-        action = self.store.frontier("project-001", "android")[0]
-        self.store.claim("project-001", "android", "builder-1", action["action_key"])
+        action = self.store.frontier("project-001", "application")[0]
+        self.store.claim("project-001", "application", "builder-1", action["action_key"])
         snapshot = self.store.export_snapshot()
         self.assertNotIn("leases", snapshot["tables"])
 
@@ -200,7 +200,7 @@ class StateEngineTest(unittest.TestCase):
         )
         try:
             self.assertEqual(copy_store.revision, self.store.revision)
-            self.assertEqual(len(copy_store.frontier("project-001", "android")), 1)
+            self.assertEqual(len(copy_store.frontier("project-001", "application")), 1)
         finally:
             copy_store.close()
 
@@ -209,13 +209,13 @@ class StateEngineTest(unittest.TestCase):
         self.store.add_condition(
             "project-001", "objective-001", "milestone-001", "condition.reviewed",
             "Change passes functional and security review", "Both reviewers must approve.",
-            "android", "quality", "director", input_record_ids=[record_id],
+            "application", "quality", "director", input_record_ids=[record_id],
             truth_ids=[truth_id], mandatory_reviewers=["security"],
             condition_id="condition-reviewed",
         )
-        action = self.store.frontier("project-001", "android")[0]
-        lease = self.store.claim("project-001", "android", "builder", action["action_key"])
-        self.store.submit(lease["lease_id"], "android", "Ready for review.", ["feature.kt"])
+        action = self.store.frontier("project-001", "application")[0]
+        lease = self.store.claim("project-001", "application", "builder", action["action_key"])
+        self.store.submit(lease["lease_id"], "application", "Ready for review.", ["feature.ts"])
 
         quality_action = self.store.frontier("project-001", "quality")[0]
         quality_lease = self.store.claim(
@@ -237,19 +237,19 @@ class StateEngineTest(unittest.TestCase):
 
     def test_hosted_delta_is_single_action_and_revision_guarded(self) -> None:
         self.add_condition()
-        action = self.store.frontier("project-001", "android")[0]
+        action = self.store.frontier("project-001", "application")[0]
         stale = {
             "format": "lattice-state-delta",
             "schema_version": 1,
             "base_revision": self.store.project_revision("project-001"),
             "project_id": "project-001",
             "action_key": action["action_key"],
-            "role": "android",
+            "role": "application",
             "actor": "chatgpt-work",
             "outcome": {
                 "type": "submit",
                 "summary": "Hosted result.",
-                "artifact_refs": ["projects/project-001/platform/android/feature.kt"],
+                "artifact_refs": ["projects/project-001/platform/web/feature.ts"],
             },
         }
         self.store.add_truth(
@@ -259,7 +259,7 @@ class StateEngineTest(unittest.TestCase):
         with self.assertRaises(LatticeError):
             self.store.apply_delta(stale)
 
-        current_action = self.store.frontier("project-001", "android")[0]
+        current_action = self.store.frontier("project-001", "application")[0]
         stale["base_revision"] = self.store.project_revision("project-001")
         stale["action_key"] = current_action["action_key"]
         result = self.store.apply_delta(stale)
@@ -267,7 +267,7 @@ class StateEngineTest(unittest.TestCase):
 
     def test_unrelated_project_mutation_does_not_stale_hosted_action(self) -> None:
         self.add_condition()
-        action = self.store.frontier("project-001", "android")[0]
+        action = self.store.frontier("project-001", "application")[0]
         base_revision = self.store.project_revision("project-001")
         self.store.ensure_project("project-002", "Unrelated Project")
         self.store.add_truth(
@@ -281,7 +281,7 @@ class StateEngineTest(unittest.TestCase):
             "base_revision": base_revision,
             "project_id": "project-001",
             "action_key": action["action_key"],
-            "role": "android",
+            "role": "application",
             "actor": "chatgpt-work",
             "outcome": {"type": "submit", "summary": "Project-local result."},
         }

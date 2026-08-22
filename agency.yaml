@@ -1,6 +1,6 @@
 agency:
   name: Lattice App Works
-  version: 0.0.3
+  version: 0.0.4
   edition: active_frontier_truth_ledger
   operating_mode: reactive_management_by_exception
   project_model: isolated_project_capsules
@@ -15,6 +15,7 @@ agency:
     - truth_is_versioned_never_silently_replaced
     - background_truth_is_recalled_only_by_relevance
     - evidence_before_readiness
+    - expertise_is_selected_by_role_and_project_capability
     - principal_control_only_at_consequence_boundaries
 
 state:
@@ -88,6 +89,7 @@ runtime:
     - AGENTS.md
     - agency.yaml
     - agents/**
+    - expertise/**
     - governance/**
     - runtime/**
     - adapters/**
@@ -151,12 +153,12 @@ roles:
       - reprioritize_product_scope
       - implement_features
       - approve_own_architecture
-  android:
-    prompt: agents/android.md
-    activation: when_project_manifest_requires_android
+  application:
+    prompt: agents/application.md
+    activation: when_project_manifest_requires_any_application_platform
     writes:
-      - projects/{project_id}/platform/android/**
-      - projects/{project_id}/tests/android-unit/**
+      - projects/{project_id}/platform/**
+      - projects/{project_id}/tests/application-unit/**
     must_not:
       - edit_contracts_or_requirements
       - implement_server_or_model_components

@@ -1,8 +1,10 @@
-# Autonomy Validation — 0.0.3
+# Autonomy Validation — 0.0.4
 
 Validated properties:
 
 - 11 specialized roles and 22 disjoint artifact write domains;
+- one selectively loaded core expertise module per role and capability-selected application platform packs;
+- open-ended platform identifiers with explicit unknown-platform fallback instead of an Android default;
 - no routine work-order, handoff, verification, QA-cycle, change-request, gate-decision, or release-gate templates;
 - guarded state mutations with project, role, version, and foreign-key checks;
 - one active objective and milestone per project;

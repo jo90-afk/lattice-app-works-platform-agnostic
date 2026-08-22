@@ -1,5 +1,5 @@
 {
-  "agency_version": "0.0.3",
+  "agency_version": "0.0.4",
   "ephemeral_state_excluded": [
     "leases"
   ],

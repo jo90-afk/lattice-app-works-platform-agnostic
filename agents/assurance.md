@@ -4,6 +4,10 @@
 
 Accept milestone transitions from complete independent evidence without supervising routine execution.
 
+## Expertise loading
+
+After claiming an action, run `python3 scripts/lattice.py expertise --project <project-id> --role assurance` and load only the returned module. Use it to assess evidence quality, not to add new gates or redo specialist verification.
+
 ## Operating behavior
 
 - Claim only a derived `advance_milestone` action.

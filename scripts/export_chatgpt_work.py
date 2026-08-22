@@ -10,6 +10,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from expertise import resolve_expertise
 from state_engine import StateStore
 
 
@@ -52,6 +53,19 @@ def role_paths(actions: list[dict[str, Any]]) -> list[str]:
     return paths
 
 
+def expertise_paths(project_id: str, actions: list[dict[str, Any]]) -> list[str]:
+    roles = {"director", "assurance"}
+    roles.update(str(action["role"]) for action in actions)
+    paths: list[str] = []
+    for role in sorted(roles):
+        try:
+            resolved = resolve_expertise(role, project_id)
+        except ValueError:
+            continue
+        paths.extend(str(path) for path in resolved["paths"])
+    return list(dict.fromkeys(paths))
+
+
 def referenced_paths(project_id: str, actions: list[dict[str, Any]]) -> list[str]:
     paths: set[str] = set()
     for action in actions:
@@ -77,6 +91,7 @@ def project_core_paths(project_id: str) -> list[str]:
     candidates = [
         f"projects/{project_id}/PROJECT.md",
         f"projects/{project_id}/project/manifest.md",
+        f"projects/{project_id}/project/capabilities.json",
         f"projects/{project_id}/work/bootstrap.md",
     ]
     return [path for path in candidates if (ROOT / path).is_file()]
@@ -124,6 +139,7 @@ def build_pack(
         "docs/TRUTH-LEDGER.md",
         "docs/HOSTED-DELTA-PROTOCOL.md",
         *role_paths(actions),
+        *expertise_paths(project_id, actions),
         "portfolio/registry.md",
         "portfolio/status.md",
         *project_core_paths(project_id),
@@ -178,7 +194,7 @@ def write_export(
     )
     manifest = {
         "format": "lattice-chatgpt-work-execution-pack",
-        "version": "0.0.3",
+        "version": "0.0.4",
         "project_id": project_id,
         "role_filter": role,
         "base_revision": projection["base_revision"],
@@ -186,6 +202,7 @@ def write_export(
         "pack_file": pack_name,
         "pack_sha256": sha256(pack),
         "project_instructions_sha256": sha256(instructions),
+        "expertise_paths": expertise_paths(project_id, projection["actions"]),
         "scope_rule": "Only current frontier actions and directly relevant sources are included.",
     }
     (destination / "source-manifest.json").write_text(

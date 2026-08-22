@@ -4,7 +4,7 @@ These rules govern every agent operating Lattice App Works.
 
 ## Canonical layers
 
-- `AGENTS.md`, `agency.yaml`, `agents/`, `governance/`, and `runtime/` form the agency kernel.
+- `AGENTS.md`, `agency.yaml`, `agents/`, `expertise/`, `governance/`, and `runtime/` form the agency kernel.
 - `portfolio/` names the Principal alias, project order, capacity, and lifecycle.
 - `projects/<project_id>/` contains one project's source artifacts and code.
 - `state/current.json` is the portable operational-state snapshot. Local runtimes index it in `.lattice/state.db`.
@@ -23,6 +23,12 @@ Before acting, use the runtime:
     python3 scripts/lattice.py claim --project <project-id> --role <role> --actor <agent-id> [--action-key <key>]
 
 The claim output is the execution brief. It contains the objective, milestone condition, linked records, relevant truths, dependencies, recent attempts, and exact role. Do not load unrelated project history merely because it exists.
+
+After claiming, resolve the smallest relevant expertise set:
+
+    python3 scripts/lattice.py expertise --project <project-id> --role <role>
+
+Load only the returned files. Every role receives one core module; Application additionally receives only the packs declared in `projects/<project-id>/project/capabilities.json`. Unknown platform identifiers remain valid and are reported for current first-party research. Expertise is advisory: it cannot override project truth, role boundaries, or the claimed condition, and its recommendations do not become work items automatically.
 
 One agent claims one action. A lease expires and is not a durable commitment. An agent may make a short private plan, but it must not persist that plan as a task list or create follow-on actions. It changes owned artifacts and then reports the result through the runtime:
 

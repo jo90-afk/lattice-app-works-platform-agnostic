@@ -1,4 +1,4 @@
-# Lattice App Works 0.0.3
+# Lattice App Works 0.0.4
 
 Lattice is a platform-agnostic, multi-project AI software agency built around an active frontier rather than a task backlog. It stores durable project state, truth, evidence, commitments, and exceptions; it derives the next few executable actions only when an agent asks for them.
 
@@ -9,12 +9,30 @@ The repository is a sanitized seed. It contains no real person's data or project
 | Layer | Location | Purpose |
 | --- | --- | --- |
 | Agency Kernel | `AGENTS.md`, `agency.yaml`, `agents/`, `governance/`, `runtime/` | Roles, authority, state rules, assurance, escalation |
+| Expertise Library | `expertise/` | Selectively loaded role playbooks and project-declared application platform packs |
 | Portfolio | `portfolio/` | Principal alias, project identity, priority, capacity |
 | Project Capsules | `projects/<project-id>/` | Product artifacts, code, tests, mandate, human-facing evidence |
 | Operational State | `state/current.json` | Git-friendly objectives, conditions, truths, evidence, commitments, exceptions, events |
 | Local Index | `.lattice/state.db` | SQLite indexes and expiring leases; generated and ignored by Git |
 
 The runtime uses only Python's standard library and SQLite.
+
+## Select expertise and platforms
+
+Every role has a researched core expertise module. Application delivery is no longer an Android-only role: the platform list is an open set in `projects/<project-id>/project/capabilities.json`. Common Android, Apple, web, Windows, Linux, CLI, and cross-platform packs ship with the seed; an unknown platform remains valid and triggers focused first-party research rather than loading the whole library.
+
+After claiming an action, resolve exactly what to load:
+
+    python3 scripts/lattice.py expertise \
+      --project first-project --role application
+
+Preview a proposed target without changing project state:
+
+    python3 scripts/lattice.py expertise \
+      --project first-project --role application \
+      --platform ios --platform web --platform linux
+
+Keep `application_platforms` and `cross_platform_strategy` synchronized with the confirmed project manifest. Expertise guides the claimed work but never overrides the mandate, current records and truths, or role boundaries.
 
 ## Initialize the seed
 

@@ -16,7 +16,8 @@
 ## Project-specific properties
 
 - Target users:
-- Platforms:
+- Platforms (keep synchronized with `project/capabilities.json`):
+- Cross-platform strategy (`native`, `undecided`, or a named framework):
 - Activated builder roles:
 - Environments:
 - Data classification:
@@ -33,5 +34,6 @@ This capsule inherits the Lattice App Works agency kernel. This manifest may nar
 - Current objective and milestone: query `python3 scripts/lattice.py status`
 - Active frontier: query `python3 scripts/lattice.py frontier --project [stable-id]`
 - Background truths: query `python3 scripts/lattice.py truth-list --project [stable-id] --attention background`
+- Role expertise: query `python3 scripts/lattice.py expertise --project [stable-id] --role [role]`
 - Known internal blockers:
 - Principal decisions pending:

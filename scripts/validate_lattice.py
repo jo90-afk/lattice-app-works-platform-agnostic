@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Lattice 0.0.3 boundaries without third-party dependencies."""
+"""Validate Lattice 0.0.4 boundaries without third-party dependencies."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import json
 import re
 import sqlite3
 import tempfile
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 
@@ -62,13 +63,17 @@ def validate_roles() -> None:
         else:
             patterns.extend(re.findall(r"^      - ([^\n]+)$", writes.group("paths"), re.MULTILINE))
     expected = {
-        "director", "product", "experience", "architecture", "android", "services",
+        "director", "product", "experience", "architecture", "application", "services",
         "intelligence", "quality", "security", "release", "assurance",
     }
     if set(found) != expected:
         fail("Expected 11 canonical roles; found " + ", ".join(found))
     if len(patterns) != 22 or len(set(patterns)) != len(patterns):
         fail("Expected 22 unique artifact write domains")
+    if (ROOT / "agents" / "android.md").exists():
+        fail("Obsolete Android-only role prompt remains active")
+    if "projects/{project_id}/platform/**" not in patterns:
+        fail("Application role does not own the platform-neutral application domain")
 
 
 def validate_state_contract() -> None:
@@ -83,8 +88,8 @@ def validate_state_contract() -> None:
     except json.JSONDecodeError as error:
         fail("Invalid state JSON: " + str(error))
         return
-    if policy.get("agency_version") != "0.0.3" or policy.get("schema_version") != 1:
-        fail("Runtime policy version is not 0.0.3/schema 1")
+    if policy.get("agency_version") != "0.0.4" or policy.get("schema_version") != 1:
+        fail("Runtime policy version is not 0.0.4/schema 1")
     if snapshot.get("format") != "lattice-state-snapshot" or snapshot.get("schema_version") != 1:
         fail("Portable state snapshot format is invalid")
     tables = snapshot.get("tables", {})
@@ -152,7 +157,7 @@ def validate_no_process_backlog() -> None:
 
 def validate_boundaries() -> None:
     kernel = [ROOT / "AGENTS.md", ROOT / "agency.yaml"]
-    for folder in ("agents", "governance", "runtime"):
+    for folder in ("agents", "expertise", "governance", "runtime"):
         kernel.extend(sorted(path for path in (ROOT / folder).rglob("*") if path.is_file()))
     for path in kernel:
         if "<PROJECT_ID>" in text(path):
@@ -181,8 +186,101 @@ def validate_adapters() -> None:
             fail("README initialization is incomplete: " + fragment)
 
 
+def validate_expertise() -> None:
+    required = ["expertise/README.md", "expertise/catalog.json", "scripts/expertise.py"]
+    require(required)
+    try:
+        catalog = json.loads(text(ROOT / "expertise" / "catalog.json"))
+    except json.JSONDecodeError as error:
+        fail("Invalid expertise catalog: " + str(error))
+        return
+    expected_roles = {
+        "director", "product", "experience", "architecture", "application", "services",
+        "intelligence", "quality", "security", "release", "assurance",
+    }
+    if catalog.get("schema_version") != 1:
+        fail("Expertise catalog schema is not 1")
+    try:
+        verified_on = date.fromisoformat(str(catalog.get("verified_on")))
+        if verified_on > datetime.now(timezone.utc).date():
+            fail("Expertise catalog verification date is in the future")
+    except ValueError:
+        fail("Expertise catalog has no valid verification date")
+
+    role_modules = catalog.get("role_modules") or {}
+    platform_packs = catalog.get("platform_packs") or {}
+    aliases = catalog.get("platform_aliases") or {}
+    if set(role_modules) != expected_roles:
+        fail("Expertise catalog must map every canonical agent role exactly once")
+    if not platform_packs:
+        fail("Expertise catalog has no application platform packs")
+    if set(aliases.values()) - set(platform_packs):
+        fail("Expertise aliases reference unknown platform packs")
+    if not catalog.get("unknown_platform_policy"):
+        fail("Expertise catalog has no unknown-platform policy")
+
+    for role, relative in role_modules.items():
+        path = ROOT / str(relative)
+        if not path.is_file():
+            fail("Missing role expertise module: " + str(relative))
+            continue
+        if text(path).count("](https://") < 2:
+            fail("Role expertise lacks primary-source basis: " + role)
+        prompt = text(ROOT / "agents" / (role + ".md"))
+        if "scripts/lattice.py expertise" not in prompt:
+            fail("Agent prompt does not selectively resolve expertise: " + role)
+    for platform, relative in platform_packs.items():
+        path = ROOT / str(relative)
+        if not path.is_file():
+            fail("Missing platform expertise pack: " + str(relative))
+            continue
+        if "](https://" not in text(path):
+            fail("Platform expertise lacks a primary source: " + platform)
+
+    try:
+        from expertise import resolve_expertise
+
+        for project in project_ids():
+            capability_path = ROOT / "projects" / project / "project" / "capabilities.json"
+            if not capability_path.is_file():
+                fail("Project has no machine-readable capabilities: " + project)
+                continue
+            try:
+                capabilities = json.loads(text(capability_path))
+            except json.JSONDecodeError as error:
+                fail("Invalid project capabilities for " + project + ": " + str(error))
+                continue
+            if capabilities.get("schema_version") != 1:
+                fail("Project capabilities schema is not 1: " + project)
+            for field in (
+                "application_platforms", "service_capabilities",
+                "intelligence_capabilities", "release_targets",
+            ):
+                values = capabilities.get(field)
+                if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
+                    fail("Project capability field must be a string list: " + project + "/" + field)
+                elif len(values) != len(set(values)):
+                    fail("Project capability field contains duplicates: " + project + "/" + field)
+            if not isinstance(capabilities.get("cross_platform_strategy"), str):
+                fail("Project cross_platform_strategy must be a string: " + project)
+            for role in expected_roles:
+                resolve_expertise(role, project)
+
+        project = project_ids()[0]
+        known = resolve_expertise("application", project, list(aliases))
+        if set(known["resolved_platform_packs"]) != set(platform_packs.values()):
+            fail("Application expertise aliases do not resolve every platform pack")
+        unknown = resolve_expertise("application", project, ["unlisted-future-platform"])
+        if unknown["unresolved_platforms"] != ["unlisted-future-platform"]:
+            fail("Unknown application platforms are not reported without rejection")
+        if any(path.startswith("expertise/platforms/") for path in unknown["paths"]):
+            fail("Unknown application platforms load unrelated platform packs")
+    except (ImportError, ValueError, KeyError) as error:
+        fail("Expertise resolver is invalid: " + str(error))
+
+
 def validate_exports() -> None:
-    from export_chatgpt_work import build_pack, write_export
+    from export_chatgpt_work import build_pack, expertise_paths, write_export
 
     require(["exports/chatgpt-work/README.md"])
     project = project_ids()[0]
@@ -190,6 +288,8 @@ def validate_exports() -> None:
     if "# Active Frontier Projection" not in expected or project not in expected:
         fail("ChatGPT Work exporter did not produce a scoped frontier projection")
         return
+    if "## Source: expertise/README.md" not in expected:
+        fail("ChatGPT Work exporter omitted selectively resolved expertise")
     with tempfile.TemporaryDirectory() as folder:
         destination = Path(folder) / project
         write_export(project, destination, False)
@@ -202,7 +302,7 @@ def validate_exports() -> None:
                 fail("ChatGPT Work exporter omitted: " + path.name)
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            if manifest.get("version") != "0.0.3":
+            if manifest.get("version") != "0.0.4":
                 fail("ChatGPT Work manifest has the wrong version")
             if manifest.get("pack_sha256") != hashlib.sha256(expected.encode()).hexdigest():
                 fail("ChatGPT Work pack hash does not match")
@@ -210,6 +310,15 @@ def validate_exports() -> None:
                 ROOT / "adapters" / "chatgpt-work" / "PROJECT-INSTRUCTIONS.md"
             ):
                 fail("ChatGPT Work instructions do not match the adapter")
+            projection_actions = json.loads(
+                re.search(
+                    r"# Active Frontier Projection\n\n```json\n(?P<json>.*?)\n```",
+                    expected,
+                    re.DOTALL,
+                ).group("json")
+            )["actions"]
+            if manifest.get("expertise_paths") != expertise_paths(project, projection_actions):
+                fail("ChatGPT Work manifest expertise scope does not match its frontier")
         except (json.JSONDecodeError, FileNotFoundError) as error:
             fail("Invalid generated ChatGPT Work export: " + str(error))
 
@@ -236,7 +345,7 @@ def validate_privacy() -> None:
         re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
         re.compile(r"(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}"),
         re.compile(r"(?<![A-Za-z0-9])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
-        re.compile(r"(?<![A-Za-z0-9])(?:\+?1[-. ]?)?\(?\d{3}\)?[-. ]?\d{3}[-. ]?\d{4}(?![A-Za-z0-9])"),
+        re.compile(r"(?<![A-Za-z0-9/])(?:\+?1[-. ]?)?\(?\d{3}\)?[-. ]?\d{3}[-. ]?\d{4}(?![A-Za-z0-9])"),
     ]
     for path in ROOT.rglob("*"):
         if not path.is_file() or any(part in {".git", ".lattice", "__pycache__"} for part in path.parts):
@@ -252,7 +361,7 @@ def validate_privacy() -> None:
 def main() -> int:
     require([
         "README.md", "AGENTS.md", "agency.yaml", "portfolio/registry.md",
-        "portfolio/status.md", "seed/SEED-MANIFEST.json", "MIGRATE-TO-0.0.3.md",
+        "portfolio/status.md", "seed/SEED-MANIFEST.json", "MIGRATE-TO-0.0.4.md",
         "governance/charter.md", "governance/autonomy-policy.md",
         "governance/ownership.md", "governance/delivery-system.md",
         "docs/ACTIVE-FRONTIER.md", "docs/TRUTH-LEDGER.md",
@@ -264,6 +373,7 @@ def main() -> int:
     validate_no_process_backlog()
     validate_boundaries()
     validate_adapters()
+    validate_expertise()
     validate_exports()
     validate_github()
     validate_privacy()
@@ -274,7 +384,8 @@ def main() -> int:
         return 1
     print(
         "Lattice validation passed: active frontier, guarded state, 11 roles, 22 write domains, "
-        "truth ledger, scoped host adapters, and sanitized project capsules."
+        "truth ledger, selective expertise, open platform capabilities, scoped host adapters, "
+        "and sanitized project capsules."
     )
     return 0
 

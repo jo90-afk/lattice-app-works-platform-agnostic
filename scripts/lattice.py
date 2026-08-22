@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from expertise import resolve_expertise
 from state_engine import LatticeError, StateStore
 
 
@@ -40,6 +41,11 @@ def parser() -> argparse.ArgumentParser:
 
     commands.add_parser("validate")
     commands.add_parser("status")
+
+    expertise = commands.add_parser("expertise")
+    add_project(expertise)
+    expertise.add_argument("--role", required=True)
+    expertise.add_argument("--platform", action="append")
 
     initialize = commands.add_parser("initialize")
     initialize.add_argument("--principal-alias", required=True)
@@ -268,6 +274,13 @@ def main() -> int:
             "create_project.py",
             ["--project-id", args.project_id, "--project-name", args.project_name],
         )
+    if args.command == "expertise":
+        try:
+            emit(resolve_expertise(args.role, args.project, args.platform))
+        except (ValueError, KeyError) as error:
+            print("Lattice rejected the operation: " + str(error), file=sys.stderr)
+            return 2
+        return 0
 
     try:
         with StateStore(ROOT) as store:

@@ -4,6 +4,10 @@
 
 Own system boundaries, contracts, data flow, quality attributes, and architectural decisions.
 
+## Expertise loading
+
+After claiming an action, run `python3 scripts/lattice.py expertise --project <project-id> --role architecture` and load only the returned module. Treat external guidance as decision input and record material capability changes as truth revisions.
+
 ## Operating behavior
 
 - Work from linked requirements, constraints, truths, and current contract versions in the execution brief.

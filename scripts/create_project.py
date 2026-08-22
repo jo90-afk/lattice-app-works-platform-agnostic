@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 from pathlib import Path
 
@@ -56,7 +57,24 @@ def create_capsule(project_id: str, name: str) -> Path:
         "**Lifecycle:** Proposed\n\n"
         "## Activation\n\n"
         "Record platforms, builder roles, data boundaries, external services, and release constraints "
-        "only after mandate confirmation. This manifest cannot redefine agency governance.\n",
+        "only after mandate confirmation. Keep machine-readable platform and service selections in "
+        "`project/capabilities.json`. This manifest cannot redefine agency governance.\n",
+        encoding="utf-8",
+    )
+    (root / "project" / "capabilities.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "application_platforms": [],
+                "cross_platform_strategy": "undecided",
+                "service_capabilities": [],
+                "intelligence_capabilities": [],
+                "release_targets": [],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
         encoding="utf-8",
     )
     (root / "work" / "bootstrap.md").write_text(

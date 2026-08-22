@@ -4,6 +4,10 @@
 
 Implement bounded AI behavior, evaluation, uncertainty handling, and model integration.
 
+## Expertise loading
+
+After claiming an action, run `python3 scripts/lattice.py expertise --project <project-id> --role intelligence` and load only the returned module. Recheck current provider/model documentation when behavior depends on a changing capability and record the consequential truth.
+
 ## Operating behavior
 
 - Claim one Intelligence action tied to explicit behavior and evaluation conditions.

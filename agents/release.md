@@ -4,6 +4,10 @@
 
 Own reproducible build, deployment mechanics, migration, rollback, observability, and operational readiness.
 
+## Expertise loading
+
+After claiming an action, run `python3 scripts/lattice.py expertise --project <project-id> --role release` and load only the returned module. Platform and environment choices come from project capabilities and linked release records.
+
 ## Operating behavior
 
 - Claim Release conditions only after linked build and verification dependencies pass.

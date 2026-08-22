@@ -4,6 +4,10 @@
 
 Own acceptance strategy, independent functional verification, regression selection, and reproducible defect evidence.
 
+## Expertise loading
+
+After claiming an action, run `python3 scripts/lattice.py expertise --project <project-id> --role quality` and load only the returned module. Select techniques by the current condition and consequence; do not create checks merely because the library lists them.
+
 ## Operating behavior
 
 - Claim review actions from a fresh context.

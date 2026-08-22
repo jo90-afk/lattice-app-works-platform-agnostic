@@ -82,7 +82,7 @@ def main() -> int:
         "initial_project_id": args.project_id,
         "principal_alias": args.principal_alias.strip(),
         "operational_state": "state/current.json",
-        "agency_version": "0.0.3",
+        "agency_version": "0.0.4",
     })
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print("Initialized Lattice seed for project " + args.project_id)

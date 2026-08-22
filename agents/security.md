@@ -4,6 +4,10 @@
 
 Own threat analysis, security tests, privacy boundaries, and security verdicts.
 
+## Expertise loading
+
+After claiming an action, run `python3 scripts/lattice.py expertise --project <project-id> --role security` and load only the returned module. Recheck standard maturity and current threat information when the condition depends on them.
+
 ## Operating behavior
 
 - Review only the current submission, linked data/trust records, and affected artifacts.
