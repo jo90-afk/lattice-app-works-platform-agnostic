@@ -15,6 +15,11 @@ from doctor import doctor  # noqa: E402
 
 
 class DoctorTest(unittest.TestCase):
+    def _local_environment(self) -> dict[str, str]:
+        environment = dict(os.environ)
+        environment.pop("LATTICE_DATABASE_URL", None)
+        return environment
+
     def test_default_local_preflight_is_machine_readable_and_ready(self) -> None:
         previous = os.environ.pop("LATTICE_DATABASE_URL", None)
         try:
@@ -41,12 +46,10 @@ class DoctorTest(unittest.TestCase):
         self.assertFalse(checks["postgres"]["required"])
 
     def test_json_cli_uses_result_contract(self) -> None:
-        environment = dict(os.environ)
-        environment.pop("LATTICE_DATABASE_URL", None)
         process = subprocess.run(
             [sys.executable, str(SCRIPTS / "doctor.py"), "--json"],
             cwd=ROOT,
-            env=environment,
+            env=self._local_environment(),
             capture_output=True,
             text=True,
             check=False,
@@ -55,6 +58,20 @@ class DoctorTest(unittest.TestCase):
         payload = json.loads(process.stdout)
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["state_backend"], "sqlite")
+
+    def test_primary_lattice_cli_exposes_doctor(self) -> None:
+        process = subprocess.run(
+            [sys.executable, str(SCRIPTS / "lattice.py"), "doctor", "--json"],
+            cwd=ROOT,
+            env=self._local_environment(),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(process.returncode, 0, process.stderr)
+        payload = json.loads(process.stdout)
+        self.assertEqual(payload["format"], "lattice-doctor")
+        self.assertTrue(payload["ok"])
 
 
 if __name__ == "__main__":
