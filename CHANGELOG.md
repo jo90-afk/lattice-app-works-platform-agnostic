@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+- Removed Principal-owned actions from each project's `Next` list because the same authority boundary is already presented once, with context and controls, in `Your decisions`.
+- Removed Principal-only exceptions from the duplicate project attention list while retaining the affected project's blocked/readiness state.
+- Corrected singular/plural decision headline grammar discovered in the 0.1.1 visual sandbox.
+
 ## 0.1.1
 
 - Rebuilt the browser control surface around the Principal's control loop instead of the state schema: human decisions first, then each project's current objective, work happening now, work ready next, attention required, and recent accepted changes.

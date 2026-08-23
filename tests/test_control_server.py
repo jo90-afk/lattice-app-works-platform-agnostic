@@ -82,6 +82,8 @@ class ControlServerTest(unittest.TestCase):
             self.assertIn("<form", page)
             self.assertIn("<button", page)
             self.assertIn("Resolve exception", page)
+            self.assertIn("1 decision needs your attention.", page)
+            self.assertEqual(page.count("principal · resolve_exception"), 0)
             self.assertNotIn("This surface is read-only", page)
 
     def test_principal_action_uses_current_guarded_action_and_closes_exception(self):
