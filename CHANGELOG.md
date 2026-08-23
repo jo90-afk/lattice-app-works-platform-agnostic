@@ -10,6 +10,8 @@
 - Rendered decision-grade Principal cards while keeping the browser strictly read-only; resolve/fulfill actions still require the guarded runtime rather than an implicit UI mutation path.
 - Added a derived project consequence graph over the active objective, linking records, truths, condition dependencies, submissions, reviews, evidence, exceptions, commitments, milestones, and currently derived actions without storing a second graph or plan.
 - Rendered consequence relationships as an accessible source → relation → target view, so the control surface explains both why work exists and why accepted state is trusted without depending on a decorative spatial visualization.
+- Added temporal supervision derived from existing timestamps and events: lease age/remaining authority, verification wait, exception age, blocked-condition age, completed action durations, retries, recovery counts, exception frequency, and verification failure rate.
+- Exposed raw elapsed seconds and rates in `/api/state` while rendering human-readable ages in the browser; no synthetic health score or new trace state is introduced.
 
 ## 0.0.6
 

@@ -15,7 +15,7 @@ from supervision_model import supervision_model  # noqa: E402
 
 
 class ControlServerTest(unittest.TestCase):
-    def test_rendered_surface_contains_portfolio_decision_and_consequence_context_without_actions(self):
+    def test_rendered_surface_contains_portfolio_decision_consequence_and_time_context_without_actions(self):
         with tempfile.TemporaryDirectory() as temporary:
             folder = Path(temporary)
             with StateStore(ROOT, db_path=folder / "state.db", snapshot_path=folder / "current.json") as store:
@@ -75,6 +75,7 @@ class ControlServerTest(unittest.TestCase):
             self.assertEqual(model["state_backend"], "sqlite")
             self.assertEqual(model["portfolio"]["active_projects"], 1)
             self.assertEqual(model["projects"][0]["consequence_graph"]["format"], "lattice-project-consequence-graph")
+            self.assertIn("temporal_health", model["projects"][0])
             self.assertIn("Control Surface Project", page)
             self.assertIn("Make supervision legible", page)
             self.assertIn("Surface is readable", page)
@@ -88,6 +89,10 @@ class ControlServerTest(unittest.TestCase):
             self.assertIn("Leave unresolved", page)
             self.assertIn("Recent accepted changes", page)
             self.assertIn("Operational telemetry", page)
+            self.assertIn("Median action", page)
+            self.assertIn("Verification failures", page)
+            self.assertIn("Oldest attention", page)
+            self.assertIn("Blocked conditions", page)
             self.assertIn("Milestone readiness", page)
             self.assertIn("Evidence chain", page)
             self.assertIn("Consequence graph", page)

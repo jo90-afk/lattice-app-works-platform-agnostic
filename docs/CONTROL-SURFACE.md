@@ -65,8 +65,9 @@ The projection adds:
 - the existing Principal-only decision inbox;
 - recent accepted semantic changes across the selected portfolio or project;
 - operational counts for claims, completions, recovery, lease expiry, worker failure, hook failure, and claim aborts;
-- observed host identities from lifecycle telemetry; and
-- a consequence graph derived for each shown project.
+- observed host identities from lifecycle telemetry;
+- a consequence graph derived for each shown project; and
+- temporal operational context derived from existing timestamps and lifecycle/semantic events.
 
 The existing project projection remains intact underneath it: objective, milestone, semantic revision, readiness, frontier, active leases, pending verification, exceptions, frontier truths, evidence chain, and recent events.
 
@@ -111,6 +112,30 @@ The browser renders these as source → relation → target chains with entity-t
 
 The graph answers two supervision questions from one model: why a frontier action exists, and what evidence/verification makes accepted state trustworthy.
 
+## Temporal operational context
+
+The control surface derives elapsed operational state from timestamps already present in canonical state and lifecycle events. It does not create a trace database or a synthetic health score.
+
+Per-project temporal context includes:
+
+- how long each active lease has been held and how much lease authority remains;
+- how long each pending submission has waited for independent verification;
+- how long each open exception has remained open;
+- active-milestone conditions currently blocked, their retry budget, and how long they have been blocked; and
+- the oldest item currently demanding operational attention.
+
+Portfolio/runtime telemetry includes:
+
+- claim → completion action durations, with raw durations plus median and maximum;
+- retry count from `condition_attempt_failed` semantic events;
+- recovery and lease-expiry counts;
+- total exceptions raised;
+- review count and negative verification rate from actual `reviews` rows;
+- worker failure/timeout, claim-abort, and hook-failure counts; and
+- observed runtime hosts where lifecycle payloads provide them.
+
+`/api/state` exposes exact seconds and fractional rates. The browser formats durations for reading but does not classify a duration as healthy or unhealthy. Threshold policy, if introduced later, must be explicit governance rather than presentation-layer inference.
+
 ## Local control surface
 
 Start the dependency-free local server:
@@ -150,4 +175,4 @@ Hooks do not receive a separate state mutation API. Any project-state change mus
 
 ## Validation
 
-The surface is validated against the same repository contract and Postgres-backed concurrency suite as the runtime. Graph regressions assert the causal and evidence relationships directly, and rendering tests require those relation names to survive into the human surface. The browser remains read-only: there are no mutation forms, buttons, or hidden UI write paths.
+The surface is validated against the same repository contract and Postgres-backed concurrency suite as the runtime. Graph regressions assert the causal and evidence relationships directly. Temporal regressions derive exact claim→completion duration from real lifecycle events and drive blocked conditions through the actual retry-budget path. Rendering tests require these dimensions to survive into the human surface. The browser remains read-only: there are no mutation forms, buttons, or hidden UI write paths.
