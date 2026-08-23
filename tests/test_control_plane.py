@@ -170,13 +170,14 @@ class ControlPlaneTest(unittest.TestCase):
         frontier = self.store.frontier("project-001", role="application", limit=1)
         self.assertEqual(frontier[0]["kind"], "satisfy_condition")
 
-    def test_expired_lease_recovery_is_audited_and_action_returns_to_frontier(self) -> None:
+    def test_expired_lease_recovery_records_abandoned_workspace_and_returns_action(self) -> None:
         claimed = claim_for_host(
             self.store,
             project_id="project-001",
             role="application",
             actor="builder-1",
-            host="local",
+            host="codex",
+            workspace_id="workspace-expired",
         )
         semantic_before = self.store.project_revision("project-001")
         with self.store.conn:
@@ -187,20 +188,59 @@ class ControlPlaneTest(unittest.TestCase):
         result = recover_expired_leases(self.store, "project-001")
         self.assertEqual(result["recovered"], 1)
         self.assertEqual(result["leases"][0]["id"], claimed["lease_id"])
+        self.assertEqual(
+            result["abandoned_workspaces"],
+            [{"project_id": "project-001", "workspace_id": "workspace-expired"}],
+        )
         self.assertEqual(result["frontiers"]["project-001"][0]["kind"], "satisfy_condition")
         self.assertEqual(self.store.project_revision("project-001"), semantic_before)
-        event_types = [
-            row["event_type"]
-            for row in self.store.conn.execute(
-                "SELECT event_type FROM events WHERE project_id = 'project-001' ORDER BY id"
-            ).fetchall()
-        ]
+        events = self.store.conn.execute(
+            "SELECT event_type, entity_id, payload_json FROM events WHERE project_id = 'project-001' ORDER BY id"
+        ).fetchall()
+        event_types = [row["event_type"] for row in events]
+        self.assertIn("workspace_abandoned", event_types)
         self.assertIn("lease_expired", event_types)
         self.assertIn("recovery_completed", event_types)
+        abandoned = next(row for row in events if row["event_type"] == "workspace_abandoned")
+        self.assertEqual(abandoned["entity_id"], "workspace-expired")
+        self.assertIn('"lease_id":"' + claimed["lease_id"] + '"', abandoned["payload_json"])
         lease = self.store.conn.execute(
             "SELECT * FROM leases WHERE id = ?", (claimed["lease_id"],)
         ).fetchone()
         self.assertIsNone(lease)
+
+    def test_recovery_does_not_duplicate_host_reported_workspace_abandonment(self) -> None:
+        claimed = claim_for_host(
+            self.store,
+            project_id="project-001",
+            role="application",
+            actor="builder-1",
+            host="codex",
+            workspace_id="workspace-explicit",
+        )
+        record_lifecycle_event(
+            self.store,
+            project_id="project-001",
+            event_type="workspace_abandoned",
+            entity_type="workspace",
+            entity_id="workspace-explicit",
+            host="codex",
+            workspace_id="workspace-explicit",
+            payload={"reason": "host_shutdown"},
+        )
+        with self.store.conn:
+            self.store.conn.execute(
+                "UPDATE leases SET expires_at = '2000-01-01T00:00:00Z' WHERE id = ?",
+                (claimed["lease_id"],),
+            )
+        result = recover_expired_leases(self.store, "project-001")
+        self.assertEqual(result["abandoned_workspaces"], [])
+        count = self.store.conn.execute(
+            """SELECT COUNT(*) FROM events
+               WHERE project_id = 'project-001' AND event_type = 'workspace_abandoned'
+                 AND entity_id = 'workspace-explicit'"""
+        ).fetchone()[0]
+        self.assertEqual(count, 1)
 
 
 if __name__ == "__main__":
