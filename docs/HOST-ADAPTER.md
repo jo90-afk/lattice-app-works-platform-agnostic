@@ -90,9 +90,22 @@ A host may retry the same completion envelope after losing the response. Lattice
 
 This makes ordinary network and process retries idempotent without introducing a completion queue. A replay must still match the project and role recorded on the original completion.
 
+### Process-loss reconciliation
+
+Immediately before a hosted completion mutates semantic state, Lattice records a durable `completion_started` event containing the lease identity, action identity, outcome type, and a hash of the exact completion intent. The marker is operational telemetry and does not advance semantic project revision.
+
+If the process disappears after that marker:
+
+- when the lease still exists, an identical retry resumes the guarded completion normally and reuses the existing marker;
+- when the semantic transition committed and deleted the lease but final lifecycle telemetry is missing, Lattice finds the matching semantic event after `completion_started`, reconstructs the expected completion event, records `completion_reconciled`, and returns `replayed: true`;
+- when the lease expired before a matching semantic transition committed, Lattice refuses the stale completion and requires the host to re-claim the current frontier;
+- when the retry changes the recorded outcome, Lattice rejects it rather than allowing one lease to authorize two different completion intents.
+
+This closes the process-loss gap between semantic commit and lifecycle telemetry without adding a completion queue or relying on conversation history.
+
 ### Repository artifact reconciliation
 
-For `submit`, any artifact reference inside `projects/<project-id>/...` is treated as a repository-local artifact that must already exist before the semantic submission transition. Missing or path-escaping project artifacts are rejected before mutation, and the lease remains active so the host can reconcile the files and retry.
+For `submit`, any artifact reference inside `projects/<project-id>/...` is treated as a repository-local artifact that must already exist before the semantic submission transition. Missing or path-escaping project artifacts are rejected before mutation, before `completion_started` is written, and the lease remains active so the host can reconcile the files and retry.
 
 Opaque or external artifact references are not interpreted as repository paths by this check. The host remains responsible for reconciling its isolated workspace into the repository before declaring project-local artifacts complete.
 
@@ -121,7 +134,7 @@ Hosts may report only operational events that do not assert governed project tru
 }
 ```
 
-Adapter-owned events such as `action_claimed`, lease recovery, hook failure, and completion telemetry cannot be forged through the external event operation.
+Adapter-owned events such as `action_claimed`, completion markers/reconciliation, lease recovery, hook failure, and completion telemetry cannot be forged through the external event operation.
 
 ## Inspect
 
@@ -149,7 +162,7 @@ Global recovery also needs no artificial host or project identity:
 }
 ```
 
-With `project_id`, recovery is scoped to that project. Recovery removes expired leases, records durable operational evidence, and recomputes the frontier. An action reappears only if current durable state still makes it ready.
+With `project_id`, recovery is scoped to that project. Recovery removes expired leases, recovers host/workspace provenance from `action_claimed`, records `workspace_abandoned` when necessary, records durable operational evidence, and recomputes the frontier. An action reappears only if current durable state still makes it ready.
 
 ## Authority boundary
 

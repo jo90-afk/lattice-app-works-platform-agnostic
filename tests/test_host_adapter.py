@@ -9,7 +9,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
+from control_plane import recover_expired_leases  # noqa: E402
 from host_adapter import handle_envelope, validate_envelope  # noqa: E402
+from recovery import begin_completion  # noqa: E402
 from state_engine import LatticeError, StateStore  # noqa: E402
 
 
@@ -83,6 +85,7 @@ class HostAdapterTest(unittest.TestCase):
                 "SELECT event_type FROM events WHERE project_id = 'project-001' ORDER BY id"
             ).fetchall()
         ]
+        self.assertIn("completion_started", event_types)
         self.assertIn("action_claimed", event_types)
         self.assertIn("action_submitted", event_types)
 
@@ -104,6 +107,90 @@ class HostAdapterTest(unittest.TestCase):
         self.assertEqual(submission_count, 1)
         self.assertEqual(completion_count, 1)
 
+    def test_retry_after_semantic_commit_reconciles_missing_completion_event(self) -> None:
+        claimed = self.claim()
+        envelope = self.submit_envelope(claimed["lease_id"])
+        lease = dict(self.store._require_lease(claimed["lease_id"]))
+        begin_completion(self.store, lease=lease, outcome=envelope["outcome"])
+
+        # Simulate process loss after StateStore committed but before lifecycle.py
+        # could append action_submitted telemetry.
+        semantic_result = self.store.submit(
+            claimed["lease_id"],
+            "application",
+            "Adapter result",
+            ["artifact.txt"],
+        )
+        self.assertEqual(semantic_result["status"], "pending")
+        before = self.store.conn.execute(
+            "SELECT COUNT(*) FROM events WHERE event_type = 'action_submitted'"
+        ).fetchone()[0]
+        self.assertEqual(before, 0)
+
+        retried = handle_envelope(self.store, envelope)
+        self.assertTrue(retried["replayed"])
+        self.assertTrue(retried["already_committed"])
+        self.assertTrue(retried["reconciled"])
+        self.assertTrue(retried["completion"]["payload"]["reconciled"])
+        self.assertEqual(retried["completion"]["event_type"], "action_submitted")
+        submission_count = self.store.conn.execute(
+            "SELECT COUNT(*) FROM submissions WHERE condition_id = 'condition-001'"
+        ).fetchone()[0]
+        completion_count = self.store.conn.execute(
+            "SELECT COUNT(*) FROM events WHERE event_type = 'action_submitted'"
+        ).fetchone()[0]
+        reconciled_count = self.store.conn.execute(
+            "SELECT COUNT(*) FROM events WHERE event_type = 'completion_reconciled'"
+        ).fetchone()[0]
+        self.assertEqual(submission_count, 1)
+        self.assertEqual(completion_count, 1)
+        self.assertEqual(reconciled_count, 1)
+
+    def test_retry_after_completion_start_but_before_mutation_completes_normally(self) -> None:
+        claimed = self.claim()
+        envelope = self.submit_envelope(claimed["lease_id"])
+        lease = dict(self.store._require_lease(claimed["lease_id"]))
+        begin_completion(self.store, lease=lease, outcome=envelope["outcome"])
+
+        result = handle_envelope(self.store, envelope)
+        self.assertEqual(result["result"]["status"], "pending")
+        starts = self.store.conn.execute(
+            "SELECT COUNT(*) FROM events WHERE event_type = 'completion_started'"
+        ).fetchone()[0]
+        self.assertEqual(starts, 1)
+
+    def test_retry_cannot_change_recorded_completion_intent(self) -> None:
+        claimed = self.claim()
+        envelope = self.submit_envelope(claimed["lease_id"])
+        lease = dict(self.store._require_lease(claimed["lease_id"]))
+        begin_completion(self.store, lease=lease, outcome=envelope["outcome"])
+        changed = self.base("complete") | {
+            "project_id": "project-001",
+            "host": "codex",
+            "lease_id": claimed["lease_id"],
+            "role": "application",
+            "outcome": {"type": "fail", "summary": "Different intent"},
+        }
+        with self.assertRaises(LatticeError):
+            handle_envelope(self.store, changed)
+        self.assertIsNotNone(self.store.conn.execute(
+            "SELECT 1 FROM leases WHERE id = ?", (claimed["lease_id"],)
+        ).fetchone())
+
+    def test_expired_completion_intent_requires_reclaim_instead_of_guessing(self) -> None:
+        claimed = self.claim()
+        envelope = self.submit_envelope(claimed["lease_id"])
+        lease = dict(self.store._require_lease(claimed["lease_id"]))
+        begin_completion(self.store, lease=lease, outcome=envelope["outcome"])
+        with self.store.conn:
+            self.store.conn.execute(
+                "UPDATE leases SET expires_at = '2000-01-01T00:00:00Z' WHERE id = ?",
+                (claimed["lease_id"],),
+            )
+        recover_expired_leases(self.store, "project-001")
+        with self.assertRaisesRegex(LatticeError, "re-claim the current frontier"):
+            handle_envelope(self.store, envelope)
+
     def test_missing_repo_artifact_rejects_before_mutation_and_preserves_lease(self) -> None:
         claimed = self.claim()
         envelope = self.submit_envelope(
@@ -121,10 +208,14 @@ class HostAdapterTest(unittest.TestCase):
         submission_count = self.store.conn.execute(
             "SELECT COUNT(*) FROM submissions WHERE condition_id = 'condition-001'"
         ).fetchone()[0]
+        starts = self.store.conn.execute(
+            "SELECT COUNT(*) FROM events WHERE event_type = 'completion_started'"
+        ).fetchone()[0]
         self.assertEqual(condition["status"], "unknown")
         self.assertEqual(condition["attempt_count"], 0)
         self.assertIsNotNone(lease)
         self.assertEqual(submission_count, 0)
+        self.assertEqual(starts, 0)
 
     def test_completion_cannot_cross_project_boundary(self) -> None:
         self.store.ensure_project("project-002", "Other Project")
