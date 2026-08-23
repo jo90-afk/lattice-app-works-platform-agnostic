@@ -1,0 +1,156 @@
+name: Capture Principal Decision Pane
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install browser harness
+        run: |
+          python3 -m pip install playwright
+          python3 -m playwright install --with-deps chromium
+      - name: Seed genuine production-launch decision boundary
+        run: |
+          python3 - <<'PY'
+          import sys
+          from pathlib import Path
+          ROOT = Path.cwd()
+          sys.path.insert(0, str(ROOT / 'scripts'))
+          from state_engine import StateStore
+          from concurrency import claim_for_host_atomic
+          from lifecycle import submit_action, review_action, advance_action
+
+          store = StateStore(ROOT)
+          try:
+              pid = 'launch-001'
+              objective = 'objective-launch'
+              milestone = 'milestone-launch'
+              condition = 'condition-launch'
+              truth = 'truth-launch'
+
+              store.ensure_project(pid, 'Lattice Mobile')
+              store.add_objective(
+                  pid,
+                  'Launch the verified mobile control experience',
+                  'Complete routine delivery autonomously, then stop at the production-distribution authority boundary.',
+                  'product',
+                  objective_id=objective,
+              )
+              store.add_milestone(
+                  pid,
+                  objective,
+                  'Release candidate is independently verified',
+                  1,
+                  True,
+                  milestone_id=milestone,
+              )
+              store.add_truth(
+                  pid,
+                  'launch.scope.confirmed',
+                  'The approved mandate includes preparation of a production-ready release candidate.',
+                  'accepted',
+                  'frontier',
+                  'director',
+                  material=True,
+                  truth_id=truth,
+              )
+              store.add_condition(
+                  pid,
+                  objective,
+                  milestone,
+                  'launch.candidate.verified',
+                  'Release candidate passes independent verification',
+                  'The built release candidate must satisfy the approved acceptance checks before any launch decision is requested.',
+                  'release',
+                  'quality',
+                  'director',
+                  truth_ids=[truth],
+                  condition_id=condition,
+              )
+
+              owner = claim_for_host_atomic(store, project_id=pid, role='release', actor='release-agent', host='sandbox', workspace_id='release-workspace')
+              submit_action(
+                  store,
+                  owner['lease_id'],
+                  'release',
+                  'Production candidate built and deployment package prepared',
+                  ['artifact://sandbox/release-candidate'],
+                  'evidence://sandbox/build-and-smoke-checks',
+              )
+              verifier = claim_for_host_atomic(store, project_id=pid, role='quality', actor='quality-agent', host='sandbox', workspace_id='quality-workspace')
+              review_action(
+                  store,
+                  verifier['lease_id'],
+                  'quality',
+                  'SATISFIED',
+                  'Independent release verification passed; no open quality findings remain',
+                  'evidence://sandbox/independent-release-verification',
+              )
+              assurance = claim_for_host_atomic(store, project_id=pid, role='assurance', actor='assurance-agent', host='sandbox', workspace_id='assurance-workspace')
+              advance_action(store, assurance['lease_id'], 'assurance', 'Verified release candidate accepted')
+
+              store.raise_exception(
+                  pid,
+                  'production-launch-authorization',
+                  'Authorize production launch',
+                  'Routine delivery is complete and independently verified. Launching the release makes the change externally visible, so agents have stopped at the recorded production-distribution boundary.',
+                  'major',
+                  'director',
+                  'director',
+                  True,
+                  'milestone',
+                  milestone,
+              )
+          finally:
+              store.close()
+          PY
+      - name: Serve control surface
+        run: |
+          python3 scripts/control_server.py --host 127.0.0.1 --port 8765 > /tmp/lattice-server.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8765/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/lattice-server.log
+          exit 1
+      - name: Capture Principal decision pane
+        run: |
+          mkdir -p ui-screenshots
+          python3 - <<'PY'
+          from pathlib import Path
+          from playwright.sync_api import sync_playwright
+          out = Path('ui-screenshots')
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              captures = [
+                  ('principal-desktop-viewport.png', {'width': 1440, 'height': 1000}, False),
+                  ('principal-desktop-full.png', {'width': 1440, 'height': 1000}, True),
+                  ('principal-mobile-full.png', {'width': 390, 'height': 844}, True),
+              ]
+              for filename, viewport, full_page in captures:
+                  page = browser.new_page(viewport=viewport)
+                  page.goto('http://127.0.0.1:8765', wait_until='networkidle')
+                  page.screenshot(path=str(out / filename), full_page=full_page)
+                  page.close()
+              detail = browser.new_page(viewport={'width': 1440, 'height': 1000})
+              detail.goto('http://127.0.0.1:8765/project?project=launch-001', wait_until='networkidle')
+              detail.screenshot(path=str(out / 'principal-project-detail.png'), full_page=True)
+              detail.close()
+              browser.close()
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lattice-principal-decision-0.1.4
+          path: ui-screenshots/
+          if-no-files-found: error
