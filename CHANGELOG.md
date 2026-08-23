@@ -9,6 +9,8 @@
 - Aligned public release metadata across `VERSION`, README, seed manifest, changelog, and the control-surface release identifier without changing `agency_version`, state schema, adapter protocol, or read-model version.
 - Added portable migration status plus self-describing snapshot backup/restore tooling with explicit refusal when active local leases make rollback unsafe or when a shared Postgres store is authoritative.
 - Added machine-readable capability negotiation that separates public release, Agency compatibility, state schema, host-adapter protocol, hosted-delta/read-model versions, backends, operations, and feature support.
+- Added cross-platform fresh-seed CI on Python 3.10 for Ubuntu, Windows, and macOS using the same `doctor`, initialization, validation, project creation, and frontier commands documented for public users.
+- Added public-beta guidance for repository privacy boundaries, stable 0.1 contracts, supported local environments, initialization reproducibility, and guarded rollback.
 
 ## 0.0.8
 

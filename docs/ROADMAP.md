@@ -234,6 +234,8 @@ Stress the control plane with stale deltas, contradictory truths, duplicated sub
 
 ## 0.1.0 — Public beta
 
+**Status: complete.** The public package now has one documented first-run path, a non-destructive `doctor` preflight, guarded snapshot backup/rollback tooling, a neutral starter capsule, explicit public/private repository guidance, stable 0.1 interface documentation, machine-readable capability negotiation, host adapter/skill packaging, and fresh-seed bootstrap CI on Python 3.10 across Ubuntu, Windows, and macOS. The existing ten-scenario evidence gate and live Postgres regression remain required alongside those public-beta checks.
+
 **Goal:** make Lattice installable and understandable by someone who did not design it.
 
 ### Setup
@@ -272,6 +274,8 @@ Organize public documentation around the operating model rather than the reposit
 Lattice may claim that it provides a local-first, host-agnostic control plane for durable project state, frontier-derived work, bounded authority, independent verification, and exception-based human supervision.
 
 It should still avoid claiming universal provider independence, production-grade consequential autonomy, or compatibility with every agent host until the portability and evaluation evidence supports those statements.
+
+**Exit criterion: satisfied.** A fresh public seed can be preflighted, initialized, validated, operated, backed up, and inspected through documented public commands without depending on conversation history or designer-only knowledge. The local bootstrap path is executed in CI on the three supported desktop OS families, and incompatible or unsafe rollback paths fail closed.
 
 ## After 0.1
 

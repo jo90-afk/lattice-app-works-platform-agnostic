@@ -9,6 +9,21 @@ permissions:
   contents: read
 
 jobs:
+  bootstrap-smoke:
+    name: bootstrap (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Run fresh-seed bootstrap smoke
+        run: python -m unittest discover -s tests -p "test_seed_initialization.py" -v
+
   validate:
     runs-on: ubuntu-latest
     services:
