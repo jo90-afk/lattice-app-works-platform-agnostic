@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from hooks import dispatch_hooks
+from provenance import claim_provenance
 from state_backend import backend_for_store
 from state_engine import LatticeError, StateStore
 
@@ -27,6 +28,15 @@ ACTION_EVENTS = {
 
 def _lease_context(store: StateStore, lease_id: str) -> dict[str, Any]:
     return dict(store._require_lease(lease_id))
+
+
+def _provenance_fields(store: StateStore, lease_id: str) -> dict[str, Any]:
+    claim = claim_provenance(store, lease_id)
+    return {
+        key: claim[key]
+        for key in ("actor", "host", "workspace_id", "claimed_at")
+        if claim.get(key) is not None
+    }
 
 
 def _record_committed_event(
@@ -102,6 +112,7 @@ def _finish(
     payload: Callable[[Any, dict[str, Any]], dict[str, Any]],
 ) -> dict[str, Any]:
     lease = _lease_context(store, lease_id)
+    provenance = _provenance_fields(store, lease_id)
     backend = backend_for_store(store)
     try:
         backend.begin_project_write(lease["project_id"])
@@ -122,6 +133,7 @@ def _finish(
             "action_kind": lease["action_kind"],
             "target_id": lease["target_id"],
             "state_backend": backend.name,
+            **provenance,
             **payload(result, lease),
         },
     )
@@ -130,6 +142,7 @@ def _finish(
 
 def release_action(store: StateStore, lease_id: str, role: str) -> dict[str, Any]:
     lease = _lease_context(store, lease_id)
+    provenance = _provenance_fields(store, lease_id)
     backend = backend_for_store(store)
     try:
         backend.begin_project_write(lease["project_id"])
@@ -150,6 +163,7 @@ def release_action(store: StateStore, lease_id: str, role: str) -> dict[str, Any
             "action_kind": lease["action_kind"],
             "target_id": lease["target_id"],
             "state_backend": backend.name,
+            **provenance,
         },
     )
     return {"released": lease_id, "lifecycle": event, "state_backend": backend.name}
@@ -174,6 +188,8 @@ def submit_action(
         payload=lambda result, _: {
             "condition_id": result["condition_id"],
             "attempt_no": result["attempt_no"],
+            "artifact_refs": artifact_refs,
+            "evidence_ref": evidence_ref,
         },
     )
 
@@ -211,6 +227,7 @@ def review_action(
             "verdict": verdict,
             "condition_id": result["condition"]["id"],
             "condition_status": result["condition"]["status"],
+            "evidence_ref": evidence_ref,
         },
     )
 
