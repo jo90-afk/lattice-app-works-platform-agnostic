@@ -46,7 +46,7 @@ The harness rejects impossible relationships such as more false acceptances than
 
 ## Executable scenarios
 
-`scripts/evaluation_scenarios.py` runs bounded scenarios against a fresh temporary Lattice store and emits a validated result object. The first executable set exercises existing production control-plane boundaries rather than synthetic table fixtures:
+`scripts/evaluation_scenarios.py` runs bounded scenarios against a fresh temporary Lattice store and emits a validated result object. The initial production-path set is:
 
 ```bash
 python3 scripts/evaluation_scenarios.py greenfield-feature-delivery
@@ -60,13 +60,37 @@ The runner creates a deterministic project/objective/milestone/condition, claims
 
 ### Verifier disagreement
 
-The owner submits a result explicitly seeded with an evaluation defect. Quality records `NOT_SATISFIED`. The scenario passes only if the condition and milestone remain unaccepted. The seeded defect then contributes one presented defect and one verification catch to the evaluation metrics.
+The owner submits a result explicitly seeded with an evaluation defect. Quality records `NOT_SATISFIED`. The scenario passes only if the condition and milestone remain unaccepted. The seeded defect contributes one presented defect and one verification catch to the evaluation metrics.
 
 ### Worker crash and lease expiry
 
 The runner first acquires a real guarded lease. Its only direct state manipulation is evaluation fault injection: the lease expiry is moved into the past to model a vanished host without introducing a wall-clock sleep. Production recovery must detect the expired lease, audit recovery, return the same derived intent to the frontier, allow another worker to reclaim it, and carry it through independent verification and Assurance acceptance. The injected failure is not itself a production mutation path.
 
-CI executes all three scenarios as command-line runs, writes their result JSON, and feeds those results back through `scripts/evaluation.py summarize` before the ordinary unit/Postgres suite runs.
+## Adversarial state and authority scenarios
+
+`scripts/evaluation_adversarial_scenarios.py` adds scenarios where the correct result is often refusal, invalidation, or bounded scheduling rather than acceptance.
+
+```bash
+python3 scripts/evaluation_adversarial_scenarios.py ambiguous-requirements-escalation
+python3 scripts/evaluation_adversarial_scenarios.py contradictory-new-information
+python3 scripts/evaluation_adversarial_scenarios.py multi-project-capacity-contention
+```
+
+### Ambiguous requirements escalation
+
+The Director records a real `principal_only` exception before any specialist condition is created. The evaluation runner makes the open interval measurable by moving only the exception timestamp backward; it does not create a special runtime state. The scenario passes only when the active frontier contains Principal work, a normal specialist worker receives no scheduler assignment, and the escalation remains necessary. This contributes one required escalation, zero unnecessary escalations, and observed blocked time for missing information.
+
+### Contradictory new information
+
+A condition is first satisfied through a normal owner submission and independent Quality verdict under an accepted truth. That truth is then treated as settled/background. A second material truth is added and linked with the production `contradicts` relation. The scenario passes only when Lattice reactivates and contests both propositions, clears the accepted truth version from the dependent condition, increments the condition state version, makes the condition no longer satisfied, keeps the milestone unaccepted, and derives new owner work. A coherent invalidation records zero state-divergence incidents; failure to invalidate records divergence.
+
+### Multi-project capacity contention
+
+Three active projects compete for three available Application workers under a temporary evaluation registry with portfolio capacity two and explicit order B → A → C. Planning must remain read-only. Dispatch must grant only B and A in the first wave. After those workers submit and release their lease capacity, a second derivation must admit C. The scenario passes only if all three projects progress to pending independent verification without creating a durable queue.
+
+The evaluation registry used here is an evaluation input, not a replacement for the repository portfolio registry.
+
+CI executes all six implemented scenarios as command-line runs, writes their result JSON, and feeds the aggregate back through `scripts/evaluation.py summarize` before the ordinary SQLite/Postgres regression suite runs.
 
 ## Semantic fingerprints
 
@@ -109,7 +133,7 @@ When the same scenario appears for more than one host, the summary compares `sta
 
 A host may use different workspaces, tools, models, or execution strategies. Lattice's claim is narrower: host-specific execution must not change the durable state meaning or acceptance semantics of the bounded scenario.
 
-The fingerprint and result contracts are now executable. Distinct host-adapter evaluation remains explicit future 0.0.8 work rather than being inferred from a changed host label.
+The fingerprint and result contracts are executable. Distinct host-adapter evaluation remains explicit future 0.0.8 work rather than being inferred from a changed host label.
 
 ## Evidence discipline
 
