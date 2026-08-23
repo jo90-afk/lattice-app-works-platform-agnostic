@@ -60,7 +60,7 @@ class ControlServerTest(unittest.TestCase):
         )
         return store
 
-    def test_rendered_surface_has_decision_first_information_architecture_and_action(self):
+    def test_rendered_surface_is_project_first_with_live_agents_and_true_principal_exception(self):
         with tempfile.TemporaryDirectory() as temporary:
             folder = Path(temporary)
             with self._store(folder) as store:
@@ -68,23 +68,16 @@ class ControlServerTest(unittest.TestCase):
                 page = render_html(model)
 
             self.assertEqual(model["state_backend"], "sqlite")
-            self.assertIn("Your decisions", page)
-            self.assertIn("Projects", page)
-            self.assertIn("What changed", page)
-            self.assertIn("Working toward", page)
-            self.assertIn("Now", page)
-            self.assertIn("Next", page)
-            self.assertIn("Needs attention", page)
-            self.assertIn("What this controls", page)
-            self.assertIn("If you act", page)
-            self.assertIn("Why this is yours", page)
-            self.assertIn("Inspect evidence and consequence state", page)
-            self.assertIn("<form", page)
-            self.assertIn("<button", page)
-            self.assertIn("Resolve exception", page)
-            self.assertIn("1 decision needs your attention.", page)
-            self.assertEqual(page.count("principal · resolve_exception"), 0)
-            self.assertNotIn("This surface is read-only", page)
+            self.assertIn("Project Portfolio", page)
+            self.assertIn("Active Projects", page)
+            self.assertIn("Agents", page)
+            self.assertIn("Application", page)
+            self.assertIn("Ready", page)
+            self.assertIn("Needs your decision", page)
+            self.assertIn("Authorize external publication", page)
+            self.assertIn("Project detail", page)
+            self.assertNotIn("What changed", page)
+            self.assertNotIn("Inspect evidence and consequence state", page)
 
     def test_principal_action_uses_current_guarded_action_and_closes_exception(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -248,28 +248,26 @@ class PostgresSupervisionExitTest(unittest.TestCase):
             self.assertEqual(telemetry["verification_failure_rate"], 0.0)
             self.assertIn("ci", telemetry["hosts"])
 
-            # The human page presents the same model as a control loop rather than a state dump.
+            # The portfolio page exposes management state and live agents; deeper evidence lives on project detail.
             for phrase in (
+                "Project Portfolio",
                 "Doing Project",
                 "Changed Project",
                 "Blocked Project",
+                "Needs your decision",
                 "Decide whether to accept the external consequence",
-                "Why this is yours",
-                "Your decisions",
-                "Working toward",
-                "Now",
-                "Next",
-                "Needs attention",
-                "What changed",
-                "Milestone accepted",
-                "System health",
-                "Oldest attention",
-                "Consequence graph",
-                "If you act",
+                "Active Projects",
+                "Agents",
+                "Application",
+                "Architecture",
+                "Director",
+                "Working",
+                "Blocked",
+                "Project detail",
             ):
                 self.assertIn(phrase, page)
-            self.assertIn("<form", page)
-            self.assertIn("<button", page)
+            self.assertNotIn("What changed", page)
+            self.assertNotIn("Inspect evidence and consequence state", page)
         finally:
             store.close()
 

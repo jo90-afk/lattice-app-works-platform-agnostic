@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3
+
+- Rebuilt the human surface as a warm portfolio dashboard modeled on the public Lattice site rather than an operations console.
+- Made projects the primary management unit with compact milestone progress and a live per-project agent status roster derived from leases, verification, frontier work, blocked conditions, and Assurance readiness.
+- Moved evidence, consequence state, and deeper project information to a separate project-detail screen.
+- Kept ordinary exceptions inside project management; the top-level human decision strip appears only for state already classified as Principal-only by governance.
+
 ## 0.1.2
 
 - Removed Principal-owned actions from each project's `Next` list because the same authority boundary is already presented once, with context and controls, in `Your decisions`.
