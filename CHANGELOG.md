@@ -7,11 +7,15 @@
 - Added a `renew` host-adapter operation while keeping lease renewal operational: it extends execution authority without advancing semantic project revision.
 - Extracted a concurrency-critical state-backend transaction interface with SQLite and Postgres implementations.
 - Added a deterministic project-scoped Postgres advisory-lock key so distributed writers can serialize one project's guarded writes without globally blocking unrelated projects.
-- Kept Postgres driver selection outside the local-first core; the reference backend accepts a DB-API-style connection and adds no mandatory dependency.
+- Kept Postgres driver selection outside the local-first core; shared deployments load `psycopg` only when explicitly configured.
 - Routed leased release, submission, failure, verification, milestone acceptance, commitment fulfillment, and exception resolution through the same project-scoped backend write boundary.
 - Recorded the selected state backend on lifecycle telemetry so supervision can distinguish local and shared-writer execution paths.
 - Added adversarial multi-connection tests proving a shared verifier lease and Assurance lease produce one durable winner and reject stale second attempts.
 - Verified that revising a condition input revokes the worker lease and returns a new versioned action to the frontier, so work based on superseded requirements cannot submit.
+- Added a Postgres-backed constructor for the canonical `StateStore` semantics without forking the truth/frontier/verification model.
+- Preserved the portable `state/current.json` contract across SQLite and Postgres with explicit backend-neutral ordering and Postgres event-sequence repair after snapshot import.
+- Added `LATTICE_DATABASE_URL` shared-store construction and `scripts/shared_host_adapter.py` while keeping SQLite as the default local runtime.
+- Added a real Postgres 17 CI service that runs the guarded claim -> submit -> independent review -> Assurance acceptance lifecycle and snapshot round trip on Postgres.
 
 ## 0.0.5
 
