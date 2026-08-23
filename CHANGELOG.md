@@ -7,6 +7,8 @@
 - Made Postgres preflight explicit only when `LATTICE_DATABASE_URL` is configured; SQLite remains the zero-dependency local default.
 - Added one documented bootstrap path from sanitized clone through initialization, mandate confirmation, objective/readiness encoding, frontier claim, evidence submission, independent verification, Assurance acceptance, inspection, and recovery.
 - Aligned public release metadata across `VERSION`, README, seed manifest, changelog, and the control-surface release identifier without changing `agency_version`, state schema, adapter protocol, or read-model version.
+- Added portable migration status plus self-describing snapshot backup/restore tooling with explicit refusal when active local leases make rollback unsafe or when a shared Postgres store is authoritative.
+- Added machine-readable capability negotiation that separates public release, Agency compatibility, state schema, host-adapter protocol, hosted-delta/read-model versions, backends, operations, and feature support.
 
 ## 0.0.8
 
