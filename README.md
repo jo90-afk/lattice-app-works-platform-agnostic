@@ -1,4 +1,4 @@
-# Lattice App Works 0.1.0
+# Lattice App Works 0.1.1
 
 Lattice is a platform-agnostic, multi-project AI software agency built around an active frontier rather than a task backlog. It stores durable project state, truth, evidence, commitments, and exceptions; it derives the next few executable actions only when an agent asks for them.
 
@@ -53,11 +53,13 @@ SQLite remains the dependency-free local default. Shared deployments may install
 
 ## Human control surface
 
-0.0.7 established a local-first supervision surface over canonical state. It is read-only: the UI does not create a second authority path.
+Run the local human control surface:
 
     python3 scripts/control_server.py
 
-Open `http://127.0.0.1:8765`. The surface uses the same configured state backend as hosted workers, including Postgres when `LATTICE_DATABASE_URL` is set. It shows portfolio state, active work, verification, readiness, evidence, Principal-only decisions, recent accepted changes, consequence relationships, and operational telemetry. Machine-readable supervision state is available at `/api/state`.
+Open `http://127.0.0.1:8765`. The browser is organized around the Principal's actual control loop rather than the database shape: decisions that require human authority first; each project's current objective and milestone; work happening now; work ready next; exceptions and blocked conditions that need attention; then accepted changes and system health.
+
+Principal-only exceptions and Principal-owned commitments can be completed directly in the browser. The UI does not create a separate authority system: it claims the exact currently advertised Principal action key and executes the same guarded lifecycle used by the CLI, preserving lease checks, durable state transitions, lifecycle telemetry, and project history. Detailed evidence and consequence state remain inspectable on demand instead of occupying the primary dashboard hierarchy. Machine-readable supervision state is available at `/api/state`.
 
 ## Evaluation harness
 
