@@ -18,6 +18,8 @@
 - Added a real Postgres 17 CI service that runs the guarded claim -> submit -> independent review -> Assurance acceptance lifecycle and snapshot round trip on Postgres.
 - Made a live Postgres database authoritative after one-time empty-store bootstrap so a stale repository snapshot cannot silently rewind shared operational state.
 - Made shared snapshot publication explicit with `scripts/shared_state_checkpoint.py`; ordinary Postgres worker mutations no longer require or rewrite a shared checkpoint file.
+- Added a queue-free bounded scheduler that derives assignments from portfolio order, current frontier, available workers, and live portfolio/project/role capacity.
+- Scheduler plans are read-only and Principal actions are never auto-scheduled; dispatch persists only leases granted through the existing atomic host-claim path and continues unrelated projects when one is blocked.
 
 ## 0.0.5
 
