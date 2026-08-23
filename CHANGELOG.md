@@ -16,6 +16,8 @@
 - Preserved the portable `state/current.json` contract across SQLite and Postgres with explicit backend-neutral ordering and Postgres event-sequence repair after snapshot import.
 - Added `LATTICE_DATABASE_URL` shared-store construction and `scripts/shared_host_adapter.py` while keeping SQLite as the default local runtime.
 - Added a real Postgres 17 CI service that runs the guarded claim -> submit -> independent review -> Assurance acceptance lifecycle and snapshot round trip on Postgres.
+- Made a live Postgres database authoritative after one-time empty-store bootstrap so a stale repository snapshot cannot silently rewind shared operational state.
+- Made shared snapshot publication explicit with `scripts/shared_state_checkpoint.py`; ordinary Postgres worker mutations no longer require or rewrite a shared checkpoint file.
 
 ## 0.0.5
 
