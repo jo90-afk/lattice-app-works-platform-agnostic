@@ -24,6 +24,7 @@
 - Added a host-neutral `lattice-execution` Agent Skill under `.agents/skills` so execution technique can be loaded selectively without becoming a second authority system.
 - Added a GitHub hosted-agent adapter that uses canonical root `AGENTS.md`, the shared execution skill, and the same versioned host-adapter envelopes as other runtimes.
 - Added the first dependency-free local control surface and `/api/state` projection.
+- Exposed milestone readiness and the submission/review evidence chain directly in the control read model and local supervision surface.
 - Removed legacy process-backlog artifacts and restored a clean neutral seed contract.
 - Added release-version consistency checks so future PRs cannot land with stale README or seed metadata.
 
