@@ -74,10 +74,20 @@ class PostgresStateStore(StateStore):
                     "UPDATE meta SET value = ? WHERE key = 'snapshot_hash'", (snapshot_hash,)
                 )
 
+    def _bump_revision(self) -> int:
+        """Atomically allocate one global snapshot revision across all projects."""
+        row = self.conn.execute(
+            """UPDATE meta
+               SET value = (CAST(value AS BIGINT) + 1)::text
+               WHERE key = 'revision'
+               RETURNING value"""
+        ).fetchone()
+        if row is None:
+            raise LatticeError("Postgres state meta has no revision row")
+        return int(row[0])
+
     def _load_snapshot(self, snapshot: dict[str, Any]) -> None:
         super()._load_snapshot(snapshot)
-        # Explicit event IDs are portable snapshot data. Repair the Postgres
-        # sequence so the next operational event continues after the imported max.
         with self.conn:
             self.conn.execute(
                 """SELECT setval(
