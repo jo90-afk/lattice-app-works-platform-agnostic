@@ -3,41 +3,22 @@
   "$id": "https://lattice.local/schemas/host-adapter-v1.json",
   "title": "Lattice Host Adapter Envelope",
   "type": "object",
-  "required": ["format", "version", "operation", "project_id", "host"],
+  "required": ["format", "version", "operation"],
   "properties": {
-    "format": {
-      "const": "lattice-host-adapter"
-    },
-    "version": {
-      "const": 1
-    },
-    "operation": {
-      "enum": ["claim", "event", "inspect", "recover"]
-    },
-    "project_id": {
-      "type": "string",
-      "minLength": 1
-    },
-    "host": {
-      "type": "string",
-      "minLength": 1
-    },
-    "workspace_id": {
-      "type": ["string", "null"]
-    },
-    "actor": {
-      "type": ["string", "null"]
-    },
-    "role": {
-      "type": ["string", "null"]
-    },
-    "action_key": {
-      "type": ["string", "null"]
-    },
+    "format": {"const": "lattice-host-adapter"},
+    "version": {"const": 1},
+    "operation": {"enum": ["claim", "complete", "event", "inspect", "recover"]},
+    "project_id": {"type": "string", "minLength": 1},
+    "host": {"type": "string", "minLength": 1},
+    "workspace_id": {"type": ["string", "null"]},
+    "actor": {"type": "string", "minLength": 1},
+    "role": {"type": "string", "minLength": 1},
+    "action_key": {"type": ["string", "null"]},
+    "ttl_minutes": {"type": ["integer", "null"], "minimum": 1},
+    "lease_id": {"type": "string", "minLength": 1},
+    "frontier_limit": {"type": "integer", "minimum": 1},
     "event_type": {
-      "type": ["string", "null"],
       "enum": [
-        null,
         "workspace_created",
         "workspace_abandoned",
         "policy_checked",
@@ -45,15 +26,72 @@
         "worker_timed_out"
       ]
     },
-    "entity_type": {
-      "type": ["string", "null"]
-    },
-    "entity_id": {
-      "type": ["string", "null"]
-    },
-    "payload": {
-      "type": "object"
+    "entity_type": {"type": "string", "minLength": 1},
+    "entity_id": {"type": "string", "minLength": 1},
+    "payload": {"type": "object"},
+    "outcome": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": [
+            "release",
+            "submit",
+            "fail",
+            "review",
+            "advance",
+            "commitment_fulfill",
+            "exception_resolve"
+          ]
+        },
+        "summary": {"type": "string"},
+        "artifact_refs": {"type": "array", "items": {"type": "string"}},
+        "evidence_ref": {"type": ["string", "null"]},
+        "verdict": {"enum": ["SATISFIED", "NOT_SATISFIED", "CONCUR", "BLOCK"]},
+        "resolution": {"type": "string"}
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {"properties": {"type": {"const": "submit"}}},
+          "then": {"required": ["summary"]}
+        },
+        {
+          "if": {"properties": {"type": {"const": "fail"}}},
+          "then": {"required": ["summary"]}
+        },
+        {
+          "if": {"properties": {"type": {"const": "review"}}},
+          "then": {"required": ["verdict", "summary"]}
+        },
+        {
+          "if": {"properties": {"type": {"const": "advance"}}},
+          "then": {"required": ["summary"]}
+        },
+        {
+          "if": {"properties": {"type": {"const": "commitment_fulfill"}}},
+          "then": {"required": ["summary"]}
+        },
+        {
+          "if": {"properties": {"type": {"const": "exception_resolve"}}},
+          "then": {"required": ["resolution"]}
+        }
+      ]
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {"properties": {"operation": {"const": "claim"}}},
+      "then": {"required": ["project_id", "host", "actor", "role"]}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "complete"}}},
+      "then": {"required": ["project_id", "host", "lease_id", "role", "outcome"]}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "event"}}},
+      "then": {"required": ["project_id", "host", "event_type", "entity_type", "entity_id"]}
+    }
+  ]
 }

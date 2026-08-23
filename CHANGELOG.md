@@ -13,6 +13,9 @@
 - Added post-transition lifecycle telemetry for release, submission, failure, verification, milestone acceptance, commitment fulfillment, and exception resolution.
 - Made completion-hook failures auditable without rolling back already committed guarded state transitions.
 - Added a Principal decision inbox derived only from `principal_only` exceptions and Principal-owned commitments.
+- Added an executable, versioned host-adapter envelope router for claim, complete, event, inspect, and recover operations.
+- Made host-adapter requirements operation-specific so global inspect/recover do not require invented project or host identities.
+- Added cross-project and role guards for hosted completion envelopes.
 - Added the first dependency-free local control surface and `/api/state` projection.
 - Removed legacy process-backlog artifacts and restored a clean neutral seed contract.
 - Added release-version consistency checks so future PRs cannot land with stale README or seed metadata.
