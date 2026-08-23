@@ -4,7 +4,7 @@ The 0.0.5 runtime integration puts ordinary claims through the host-neutral cont
 
 ## Unified claim path
 
-`python3 scripts/lattice.py claim` now accepts optional host metadata and defaults to `local`:
+`python3 scripts/lattice.py claim` accepts optional host metadata and defaults to `local`:
 
 ```bash
 python3 scripts/lattice.py claim \
@@ -18,6 +18,32 @@ python3 scripts/lattice.py claim \
 Before the claim is made, expired leases for the project are recovered and audited. The claim remains subject to the existing frontier, role, and WIP guards.
 
 Use `python3 scripts/lattice.py inspect` for the read-only control projection and `python3 scripts/lattice.py recover --project <id>` for explicit recovery.
+
+## Complete action lifecycle
+
+Claim is only the start of the runtime boundary. Completed leased actions now have a host-neutral lifecycle wrapper in `scripts/lifecycle.py` for release, submission, failure, verification, milestone acceptance, commitment fulfillment, and exception resolution.
+
+For example:
+
+```bash
+python3 scripts/lifecycle.py submit \
+  --lease <lease-id> \
+  --role application \
+  --summary "Increment implemented" \
+  --artifact projects/first-project/platform/result.txt
+```
+
+The guarded state transition commits first. Lattice then emits an operational lifecycle event carrying the lease, action key, target, outcome identity, and current semantic revision. Post-transition hook failure is audited as `hook_failed` with `committed: true`; it cannot retroactively turn accepted state into a failed operation.
+
+Operational event types include:
+
+- `action_released`
+- `action_submitted`
+- `action_failed`
+- `verification_recorded`
+- `milestone_acceptance_recorded`
+- `commitment_fulfillment_recorded`
+- `exception_resolution_recorded`
 
 ## Semantic revision and event sequence
 
@@ -37,11 +63,18 @@ python3 scripts/control_server.py
 
 It binds to `127.0.0.1:8765` by default and serves:
 
-- `/` — human portfolio/project status;
-- `/api/state` — the read model as JSON;
+- `/` — human portfolio/project status and the Principal decision inbox;
+- `/api/state` — the read model plus the Principal decision projection as JSON;
 - `/health` — process health.
 
-The first surface is intentionally read-only. It shows active objective and milestone, ready work, active workers, pending verification, and open exceptions. Authority remains in guarded state transitions.
+The surface remains intentionally read-only. It shows active objective and milestone, ready work, active workers, pending verification, open exceptions, and a Principal inbox derived only from durable state that actually requires human authority.
+
+The Principal inbox is not a task list. It contains only:
+
+- open exceptions explicitly marked `principal_only`; and
+- open commitments whose owner is `principal`.
+
+Routine remediation, ordinary verification, and Director-owned commitments stay out of it. Authority remains in guarded state transitions.
 
 ## Lifecycle hooks
 
@@ -51,16 +84,19 @@ The first surface is intentionally read-only. It shows active objective and mile
 {
   "action_claimed": [
     ["python3", "integrations/on_claim.py"]
+  ],
+  "verification_recorded": [
+    ["python3", "integrations/on_verification.py"]
   ]
 }
 ```
 
 Hooks receive the event envelope as JSON on stdin, run from the repository root in declaration order, and execute directly rather than through a shell.
 
-Lifecycle hooks are post-commit integrations. A nonzero hook exit is recorded as `hook_failed`; it does not pretend that the triggering durable event never happened. For an `action_claimed` hook failure, Lattice fails closed before handing the claim to a worker: it releases the lease and records `claim_aborted`, returning the action to the normally derived frontier. This prevents an error response from leaving hidden in-flight work behind.
+Lifecycle hooks are post-commit integrations. A nonzero hook exit is recorded as `hook_failed`; it does not pretend that the triggering durable event never happened. For an `action_claimed` hook failure, Lattice fails closed before handing the claim to a worker: it releases the lease and records `claim_aborted`, returning the action to the normally derived frontier. For completion events, the state transition remains committed and the hook failure is observable for integration recovery.
 
 Hooks do not receive a separate state mutation API. Any project-state change must still go through a guarded Lattice operation.
 
 ## Validation
 
-This integration is validated against the repository's active seed contract, including capsule/state agreement, machine-readable capabilities, release-version consistency, and the absence of legacy process-backlog artifacts.
+This integration is validated against the repository's active seed contract, including capsule/state agreement, machine-readable capabilities, release-version consistency, lifecycle regression coverage, Principal-inbox derivation, and the absence of legacy process-backlog artifacts.
