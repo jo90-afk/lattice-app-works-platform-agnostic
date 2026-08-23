@@ -10,7 +10,7 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from lifecycle import advance_action, release_action, review_action, submit_action  # noqa: E402
-from state_engine import StateStore  # noqa: E402
+from state_engine import LatticeError, StateStore  # noqa: E402
 
 
 class LifecycleTest(unittest.TestCase):
@@ -48,7 +48,11 @@ class LifecycleTest(unittest.TestCase):
     def test_submit_review_and_acceptance_emit_post_transition_events(self) -> None:
         claim = self.store.claim("project-001", "application", "builder")
         submitted = submit_action(
-            self.store, claim["lease_id"], "application", "Built", ["artifact.txt"]
+            self.store,
+            claim["lease_id"],
+            "application",
+            "Built",
+            ["projects/project-001/platform/artifact.txt"],
         )
         self.assertEqual(submitted["result"]["status"], "pending")
         self.assertEqual(submitted["lifecycle"]["event_type"], "action_submitted")
@@ -73,6 +77,27 @@ class LifecycleTest(unittest.TestCase):
         self.assertIn("action_submitted", self.event_types())
         self.assertIn("verification_recorded", self.event_types())
         self.assertIn("milestone_acceptance_recorded", self.event_types())
+
+    def test_submission_rejects_artifact_outside_role_domain_and_preserves_lease(self) -> None:
+        claim = self.store.claim("project-001", "application", "builder")
+        with self.assertRaisesRegex(LatticeError, "does not own artifact path"):
+            submit_action(
+                self.store,
+                claim["lease_id"],
+                "application",
+                "Wrong domain",
+                ["projects/project-001/services/server.py"],
+            )
+        self.assertIsNotNone(
+            self.store.conn.execute(
+                "SELECT 1 FROM leases WHERE id = ?", (claim["lease_id"],)
+            ).fetchone()
+        )
+        condition = self.store.conn.execute(
+            "SELECT status, attempt_count FROM conditions WHERE id = 'condition-001'"
+        ).fetchone()
+        self.assertEqual(condition["status"], "unknown")
+        self.assertEqual(condition["attempt_count"], 0)
 
     def test_release_returns_action_without_semantic_revision_change(self) -> None:
         before = self.store.project_revision("project-001")
