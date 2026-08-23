@@ -31,6 +31,20 @@ Example envelope:
 }
 ```
 
+## Artifact write ownership
+
+The canonical role write domains in `agency.yaml` are executable concurrency policy. `scripts/write_ownership.py` reads those domains directly rather than maintaining a second permissions map.
+
+A repository-local artifact submitted under a lease must:
+
+- remain inside the leased project capsule;
+- fall inside one of the leasing role's declared write domains; and
+- avoid path traversal outside that domain.
+
+Logical external references such as `artifact://...` are evidence identities rather than claims of repository ownership and remain valid.
+
+Submission ownership is checked before semantic mutation, so a rejected cross-domain artifact leaves the lease and readiness condition unchanged. The bounded scheduler also compares active and proposed role domains and will not co-schedule roles whose declared repository paths overlap. The atomic claim remains the authority grant; write-domain checks make the filesystem consequence of that authority explicit.
+
 ## Operational state backends
 
 `scripts/state_backend.py` defines the transaction boundary used by concurrency-critical operations. It deliberately does not define a second truth model or snapshot format.
@@ -46,7 +60,7 @@ Claim, renewal, release, submission, failure, verification, milestone acceptance
 
 `scripts/postgres_store.py` runs the canonical `StateStore` semantics on a supplied DB-API Postgres connection. It uses the compatibility layer in `scripts/sql_dialect.py` for parameter syntax and sqlite3.Row-compatible result access, renders Postgres DDL from the canonical `runtime/schema.sql`, and preserves `state/current.json` as the portable snapshot contract.
 
-Snapshot export uses explicit primary/composite key ordering rather than SQLite `rowid`. Snapshot import repairs the Postgres `events.id` sequence after inserting portable explicit event IDs, so subsequent events continue monotonically.
+Snapshot export uses explicit primary/composite key ordering rather than SQLite `rowid`. A live Postgres store is authoritative after one-time empty-store bootstrap; repository snapshots cannot silently rewind shared operational state. Portable checkpoint publication is explicit through `scripts/shared_state_checkpoint.py`.
 
 Postgres driver selection remains outside the core. The default installation is still Python's standard library plus SQLite. A shared deployment installs a compatible `psycopg` driver and sets:
 
@@ -59,7 +73,7 @@ python3 scripts/shared_host_adapter.py --file envelope.json
 
 ## Validation
 
-CI starts a real Postgres service and runs the guarded lifecycle through it: objective and milestone creation, condition derivation, hosted claim, submission, independent verification, and Assurance acceptance. The same test then exports the portable snapshot, rebuilds a clean Postgres schema from it, verifies semantic state survives, and proves event sequencing continues after the imported maximum ID.
+CI starts a real Postgres service and runs the guarded lifecycle through it: objective and milestone creation, condition derivation, hosted claim, submission, independent verification, and Assurance acceptance. The same test exports the portable snapshot, rebuilds a clean Postgres schema from it, verifies semantic state survives, and proves event sequencing continues after the imported maximum ID.
 
 Postgres support is therefore gated by the same semantic lifecycle rather than by adapter-unit tests alone.
 
@@ -70,6 +84,8 @@ Every operational backend preserves these rules:
 - one active lease per action key;
 - project and role WIP limits are checked atomically with lease creation;
 - lease renewal requires the current owner;
+- repository artifacts remain inside the leasing role's canonical write domains;
+- workers with overlapping role write domains are not intentionally co-scheduled inside one project;
 - expired authority cannot be resurrected;
 - semantic revisions are distinct from operational event sequence;
 - unrelated projects do not share a project-scoped lock in distributed backends;
