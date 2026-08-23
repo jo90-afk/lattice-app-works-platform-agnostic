@@ -240,7 +240,8 @@ class PostgresSupervisionExitTest(unittest.TestCase):
             decision = model["principal_inbox"]["items"][0]
             self.assertEqual(decision["target_id"], principal_exception["id"])
             self.assertEqual(decision["project_id"], "blocked-001")
-            self.assertIn("Principal", decision["authority_reason"])
+            self.assertIn("principal_only", decision["authority_reason"])
+            self.assertIn("does not permit an agent role", decision["authority_reason"])
             self.assertEqual(decision["affected_state"]["target"]["state"]["id"], "condition-blocked-001")
             self.assertEqual(
                 {choice["choice"] for choice in decision["supported_choices"]},
