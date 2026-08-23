@@ -1,0 +1,95 @@
+name: Capture Lattice UI 0.1.3
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install browser harness
+        run: |
+          python3 -m pip install playwright
+          python3 -m playwright install --with-deps chromium
+      - name: Seed representative portfolio state
+        run: |
+          python3 - <<'PY'
+          import sys
+          from pathlib import Path
+          ROOT = Path.cwd()
+          sys.path.insert(0, str(ROOT / 'scripts'))
+          from state_engine import StateStore
+          from concurrency import claim_for_host_atomic
+          from lifecycle import submit_action
+
+          store = StateStore(ROOT)
+          try:
+              def project(pid, name, owner, objective, milestone, condition_title):
+                  store.ensure_project(pid, name)
+                  store.add_objective(pid, objective, 'Representative portfolio state.', 'product', objective_id=f'obj-{pid}')
+                  store.add_milestone(pid, f'obj-{pid}', milestone, 1, True, milestone_id=f'ms-{pid}')
+                  store.add_truth(pid, 'portfolio.context', f'{name} has current project context.', 'accepted', 'frontier', 'director', truth_id=f'truth-{pid}')
+                  store.add_condition(pid, f'obj-{pid}', f'ms-{pid}', 'portfolio.result', condition_title, 'Complete the current bounded result.', owner, 'quality', 'director', truth_ids=[f'truth-{pid}'], condition_id=f'cond-{pid}')
+
+              project('app-001', 'Lattice Mobile', 'application', 'Ship the mobile control experience', 'Core mobile workflow is usable', 'Implement mobile portfolio interactions')
+              project('api-001', 'Shared Runtime API', 'services', 'Stabilize host-neutral runtime contracts', 'Shared API contract is verified', 'Implement runtime contract endpoint')
+              project('migration-001', 'State Migration', 'architecture', 'Move state safely across environments', 'Migration path preserves canonical state', 'Define migration compatibility boundary')
+
+              claim_for_host_atomic(store, project_id='app-001', role='application', actor='application-mobile', host='sandbox', workspace_id='mobile-workspace')
+
+              services = claim_for_host_atomic(store, project_id='api-001', role='services', actor='services-api', host='sandbox', workspace_id='api-workspace')
+              submit_action(store, services['lease_id'], 'services', 'Runtime endpoint implemented', ['artifact://sandbox/runtime-api'], 'evidence://sandbox/runtime-api')
+              claim_for_host_atomic(store, project_id='api-001', role='quality', actor='quality-api', host='sandbox', workspace_id='api-review')
+
+              store.raise_exception('migration-001', 'migration-tooling-gap', 'Migration dry-run tooling needs remediation', 'The migration remains delegated; architecture and release should resolve the tooling gap before verification.', 'minor', 'director', 'director', False, 'condition', 'cond-migration-001')
+          finally:
+              store.close()
+          PY
+      - name: Serve control surface
+        run: |
+          python3 scripts/control_server.py --host 127.0.0.1 --port 8765 > /tmp/lattice-server.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8765/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/lattice-server.log
+          exit 1
+      - name: Capture screenshots
+        run: |
+          mkdir -p ui-screenshots
+          python3 - <<'PY'
+          from pathlib import Path
+          from playwright.sync_api import sync_playwright
+          out = Path('ui-screenshots')
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              for filename, viewport, full_page in [
+                  ('desktop-viewport.png', {'width': 1440, 'height': 1000}, False),
+                  ('desktop-full.png', {'width': 1440, 'height': 1000}, True),
+                  ('tablet-full.png', {'width': 900, 'height': 1000}, True),
+                  ('mobile-full.png', {'width': 390, 'height': 844}, True),
+              ]:
+                  page = browser.new_page(viewport=viewport)
+                  page.goto('http://127.0.0.1:8765', wait_until='networkidle')
+                  page.screenshot(path=str(out / filename), full_page=full_page)
+                  page.close()
+              detail = browser.new_page(viewport={'width': 1440, 'height': 1000})
+              detail.goto('http://127.0.0.1:8765/project?project=app-001', wait_until='networkidle')
+              detail.screenshot(path=str(out / 'project-detail.png'), full_page=True)
+              detail.close()
+              browser.close()
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lattice-ui-0.1.3
+          path: ui-screenshots/
+          if-no-files-found: error
