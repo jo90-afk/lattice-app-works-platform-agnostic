@@ -1,8 +1,41 @@
-# Lattice App Works 0.0.8
+# Lattice App Works 0.1.0
 
 Lattice is a platform-agnostic, multi-project AI software agency built around an active frontier rather than a task backlog. It stores durable project state, truth, evidence, commitments, and exceptions; it derives the next few executable actions only when an agent asks for them.
 
 The repository is a sanitized seed. It contains no real person's data or project history.
+
+## Public-beta bootstrap
+
+Use Python 3.10 or newer. The supported first-run path is deliberately linear:
+
+1. clone or copy the sanitized repository;
+2. run the non-destructive environment preflight;
+3. initialize the neutral seed with one project identity;
+4. confirm that project's mandate;
+5. encode one objective, active milestone, and only the readiness conditions needed for it;
+6. derive and claim work from the frontier;
+7. submit artifacts and evidence;
+8. verify with a fresh role;
+9. let Assurance accept the milestone or route an exception.
+
+From the repository root, start with:
+
+    python3 scripts/doctor.py
+
+For automation or troubleshooting:
+
+    python3 scripts/doctor.py --json
+
+`doctor` checks the Python runtime, required repository layout, release metadata, canonical repository/state validation, local runtime writeability, and the configured state backend. SQLite is the dependency-free default. If `LATTICE_DATABASE_URL` is set, `doctor` also requires `psycopg` and verifies Postgres connectivity without mutating Lattice state.
+
+Then initialize the seed:
+
+    python3 scripts/lattice.py initialize \
+      --principal-alias "Repository Owner" \
+      --project-id first-project \
+      --project-name "First Project"
+
+Continue with [Initialize the seed](#initialize-the-seed) below, or follow the single end-to-end walkthrough in [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md).
 
 ## Architecture
 
@@ -28,7 +61,7 @@ Open `http://127.0.0.1:8765`. The surface uses the same configured state backend
 
 ## Evaluation harness
 
-0.0.8 begins the evidence phase: repeatable scenarios and metrics for testing whether durable state, bounded authority, recovery, and independent verification actually reduce autonomy failures.
+0.0.8 established a fail-closed evidence suite for testing whether durable state, bounded authority, recovery, and independent verification actually reduce autonomy failures.
 
 Validate the canonical scenario registry:
 
@@ -38,7 +71,7 @@ Summarize one or more versioned run-result files:
 
     python3 scripts/evaluation.py summarize evals/results/*.json
 
-The initial harness covers all ten roadmap scenario classes and reports routine autonomy, false acceptance, unnecessary escalation, recovery success, state divergence, verification catch rate, missing-information blocked time, context volume per accepted change, and cross-host state/acceptance equivalence. An unexercised denominator is reported as unknown rather than as a perfect score.
+CI executes all ten roadmap scenario classes, including a live multi-connection Postgres conflict case, before the ordinary regression suite. Metrics include routine autonomy, false acceptance, unnecessary escalation, recovery success, state divergence, verification catch rate, missing-information blocked time, context volume per accepted change, and cross-host state/acceptance equivalence. An unexercised denominator is reported as unknown rather than as a perfect score.
 
 See [`docs/EVALUATION.md`](docs/EVALUATION.md).
 
@@ -67,7 +100,7 @@ Keep `application_platforms` and `cross_platform_strategy` synchronized with the
 
 ## Initialize the seed
 
-Use Python 3.10 or newer. From the repository root:
+Run `python3 scripts/doctor.py` before initialization. Then, from the repository root:
 
     python3 scripts/lattice.py initialize \
       --principal-alias "Repository Owner" \
@@ -117,7 +150,7 @@ The returned context is the execution brief. After editing owned files and runni
       --artifact projects/first-project/ops/build.md \
       --evidence-ref projects/first-project/quality/build-output.txt
 
-A fresh verifier claims the resulting review action and records its verdict. When every condition passes, Assurance receives a milestone-advancement action.
+A fresh verifier claims the resulting review action and records its verdict. When every condition passes, Assurance receives a milestone-advancement action. The complete command sequence is in `docs/GETTING-STARTED.md`.
 
 ## Add another project
 

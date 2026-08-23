@@ -198,7 +198,7 @@ def render_html(model: dict) -> str:
 
 
 class ControlHandler(BaseHTTPRequestHandler):
-    server_version = "LatticeControl/0.0.8"
+    server_version = "LatticeControl/0.1.0"
 
     def _model(self) -> dict:
         query = parse_qs(urlparse(self.path).query)
