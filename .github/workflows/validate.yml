@@ -47,6 +47,10 @@ jobs:
           python3 scripts/evaluation_gate.py /tmp/lattice-evals/*.json
       - name: Install optional Postgres test driver
         run: python3 -m pip install "psycopg[binary]>=3.2,<4"
+      - name: Run live Postgres autonomy evaluation
+        run: |
+          python3 scripts/evaluation_postgres_scenarios.py concurrent-artifact-conflict --host ci-postgres --run-id ci-postgres-conflict > /tmp/lattice-evals/postgres-conflict.json
+          python3 scripts/evaluation_gate.py /tmp/lattice-evals/*.json
       - name: Run state-engine tests
         if: ${{ always() }}
         run: python3 -m unittest discover -s tests -v

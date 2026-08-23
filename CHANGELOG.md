@@ -14,7 +14,9 @@
 - Added a contradictory-information scenario proving a newly linked material contradiction reactivates and contests truth, preserves the previously accepted truth version as historical provenance, invalidates current condition satisfaction, increments its state version, and re-derives owner work without accepting the milestone.
 - Added a multi-project contention scenario proving a two-slot portfolio dispatches in recorded order, creates no durable queue, and admits the third project as capacity is released while all three progress toward independent verification.
 - Made the executable evaluation aggregate fail closed when any scenario result reports `outcome: failed`; successful process execution alone cannot make a failed evaluation pass CI.
-- Expanded the CI evidence aggregate to six executable roadmap scenarios before the full regression suite.
+- Added a live-Postgres concurrent-artifact-conflict evaluation that races two hosted deltas prepared from one observed revision, requires one durable winner and one stale rejection, then independently verifies the surviving submission.
+- Kept concurrency rejection separate from verification metrics: serialization proves zero accepted-state divergence, while Quality verification remains a distinct evidence event rather than inheriting a synthetic catch.
+- Expanded the CI evidence aggregate to seven executable roadmap scenarios, including the real multi-connection Postgres race, before the full regression suite.
 
 ## 0.0.7
 

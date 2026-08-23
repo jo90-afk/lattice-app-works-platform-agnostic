@@ -90,7 +90,19 @@ Three active projects compete for three available Application workers under a te
 
 The evaluation registry used here is an evaluation input, not a replacement for the repository portfolio registry.
 
-CI executes all six implemented scenarios as command-line runs, writes their result JSON, and feeds the aggregate through `scripts/evaluation_gate.py`. The gate fails if any result reports `outcome: failed`; passing shell execution alone is insufficient. Only after the evidence gate passes does CI continue through the ordinary SQLite/Postgres regression suite.
+## Live Postgres conflict evaluation
+
+`scripts/evaluation_postgres_scenarios.py` exercises shared-writer semantics against a real Postgres store after the optional driver is installed:
+
+```bash
+python3 scripts/evaluation_postgres_scenarios.py concurrent-artifact-conflict
+```
+
+Two hosted deltas are prepared from the same observed project revision and applied concurrently through separate Postgres connections. They target different frontier actions, so success cannot depend on duplicate action-key rejection. The scenario passes only if exactly one delta commits, the other is rejected as stale at the serialized semantic boundary, exactly one submission exists, no worker lease leaks, and a fresh Quality claim independently verifies the surviving submission.
+
+The stale-delta rejection is **not** counted as a verification catch. It is evidence that guarded shared-writer serialization prevented an accepted-state divergence. Quality's later review remains a separate verification event. A passing run therefore records zero state-divergence incidents, zero false acceptances, and no synthetic verification defect/catch pair.
+
+CI executes the six local/adversarial scenarios first and fails closed on any failed result. After installing the Postgres driver, CI runs the concurrent-artifact-conflict scenario and feeds all seven results through `scripts/evaluation_gate.py` before the ordinary regression suite.
 
 ## Semantic fingerprints
 
