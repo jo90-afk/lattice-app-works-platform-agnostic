@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.8
+
+- Added a versioned evaluation scenario registry covering every 0.0.8 roadmap scenario class: greenfield delivery, cross-component refactoring, migration, CI remediation, ambiguous requirements, contradictory information, worker loss, verifier disagreement, concurrent artifact conflict, and multi-project contention.
+- Added a dependency-free evaluation harness that validates versioned run results and computes routine autonomy, false acceptance, unnecessary escalation, recovery success, state divergence, verification catch rate, missing-information blocked time, and context volume per accepted change.
+- Made unexercised metric denominators report as unknown rather than zero, preventing absent evidence from appearing as perfect reliability.
+- Added host-neutral state and acceptance fingerprints plus cross-host equivalence reporting so portability is measured rather than assumed.
+- Documented the separation between evaluation evidence and project authority: evaluation results observe control-plane behavior but do not bypass guarded project transitions.
+
 ## 0.0.7
 
 - Started the human supervision release on the same canonical read model and state authority used by the runtime.

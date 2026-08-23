@@ -1,4 +1,4 @@
-# Lattice App Works 0.0.7
+# Lattice App Works 0.0.8
 
 Lattice is a platform-agnostic, multi-project AI software agency built around an active frontier rather than a task backlog. It stores durable project state, truth, evidence, commitments, and exceptions; it derives the next few executable actions only when an agent asks for them.
 
@@ -20,11 +20,27 @@ SQLite remains the dependency-free local default. Shared deployments may install
 
 ## Human control surface
 
-0.0.7 builds a local-first supervision surface over canonical state. It is read-only: the UI does not create a second authority path.
+0.0.7 established a local-first supervision surface over canonical state. It is read-only: the UI does not create a second authority path.
 
     python3 scripts/control_server.py
 
-Open `http://127.0.0.1:8765`. The surface uses the same configured state backend as hosted workers, including Postgres when `LATTICE_DATABASE_URL` is set. It shows portfolio state, active work, verification, readiness, evidence, Principal-only decisions, recent accepted changes, and operational telemetry. Machine-readable supervision state is available at `/api/state`.
+Open `http://127.0.0.1:8765`. The surface uses the same configured state backend as hosted workers, including Postgres when `LATTICE_DATABASE_URL` is set. It shows portfolio state, active work, verification, readiness, evidence, Principal-only decisions, recent accepted changes, consequence relationships, and operational telemetry. Machine-readable supervision state is available at `/api/state`.
+
+## Evaluation harness
+
+0.0.8 begins the evidence phase: repeatable scenarios and metrics for testing whether durable state, bounded authority, recovery, and independent verification actually reduce autonomy failures.
+
+Validate the canonical scenario registry:
+
+    python3 scripts/evaluation.py validate
+
+Summarize one or more versioned run-result files:
+
+    python3 scripts/evaluation.py summarize evals/results/*.json
+
+The initial harness covers all ten roadmap scenario classes and reports routine autonomy, false acceptance, unnecessary escalation, recovery success, state divergence, verification catch rate, missing-information blocked time, context volume per accepted change, and cross-host state/acceptance equivalence. An unexercised denominator is reported as unknown rather than as a perfect score.
+
+See [`docs/EVALUATION.md`](docs/EVALUATION.md).
 
 ## Roadmap
 
