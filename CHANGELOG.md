@@ -7,6 +7,9 @@
 - Added host/workspace-aware claims, durable lifecycle events, and audited expired-lease recovery.
 - Routed the primary claim path through the control plane.
 - Added deterministic, fail-closed lifecycle hooks.
+- Kept operational lifecycle telemetry from advancing semantic project revisions, so host events do not stale valid hosted deltas.
+- Added explicit event sequencing alongside semantic revision reporting in the control read model.
+- Compensate failed post-claim hooks by releasing the lease and recording `hook_failed` plus `claim_aborted`, so no failed claim remains hidden in flight.
 - Added the first dependency-free local control surface and `/api/state` projection.
 - Removed legacy process-backlog artifacts and restored a clean neutral seed contract.
 - Added release-version consistency checks so future PRs cannot land with stale README or seed metadata.
