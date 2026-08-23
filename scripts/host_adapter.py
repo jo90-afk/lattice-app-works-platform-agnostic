@@ -43,7 +43,10 @@ OUTCOMES = {
 
 
 def _required(envelope: dict[str, Any], *names: str) -> None:
-    missing = [name for name in names if envelope.get(name) in {None, ""}]
+    missing = [
+        name for name in names
+        if envelope.get(name) is None or envelope.get(name) == ""
+    ]
     if missing:
         raise LatticeError("Host adapter envelope is missing: " + ", ".join(missing))
 
