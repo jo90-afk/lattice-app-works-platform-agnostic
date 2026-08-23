@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1
+
+- Rebuilt the browser control surface around the Principal's control loop instead of the state schema: human decisions first, then each project's current objective, work happening now, work ready next, attention required, and recent accepted changes.
+- Made Principal-only exceptions and Principal-owned commitments directly actionable in the browser by claiming the exact currently advertised Principal action key and executing the existing guarded lifecycle rather than creating a second mutation path.
+- Kept evidence, frontier truths, and consequence relationships available as drill-down inspection state instead of expanding them into the primary dashboard hierarchy.
+- Added responsive action forms with explicit decision consequences and durable decision notes, while preserving `/api/state` as the machine-readable supervision projection.
+
 ## 0.1.0
 
 - Started the public-beta release on the sanitized 0.0.8 control-plane baseline.

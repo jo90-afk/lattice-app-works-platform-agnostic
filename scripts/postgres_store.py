@@ -36,6 +36,11 @@ SNAPSHOT_ORDER = {
     "events": "id",
 }
 
+# Schema creation is a database-wide bootstrap concern, not a per-worker action.
+# A stable advisory lock lets simultaneous first connections converge on one bootstrap
+# without running CREATE TABLE/INDEX against an already-active operational store.
+SCHEMA_BOOTSTRAP_LOCK = 0x4C415454494345  # "LATTICE" as a compact positive bigint.
+
 
 class PostgresStateStore(StateStore):
     """Run canonical StateStore semantics with intrinsic project serialization.
@@ -59,10 +64,7 @@ class PostgresStateStore(StateStore):
         self.db_path = None
         self.snapshot_path = snapshot_path or self.root / "state" / "current.json"
         self.conn = PostgresConnectionAdapter(connection)
-        self.conn.executescript(
-            postgres_schema((self.root / "runtime" / "schema.sql").read_text(encoding="utf-8"))
-        )
-        self.conn.commit()
+        self._ensure_schema()
         self._ensure_meta()
 
         project_count = int(self.conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0])
@@ -74,6 +76,37 @@ class PostgresStateStore(StateStore):
                 self.conn.execute(
                     "UPDATE meta SET value = ? WHERE key = 'snapshot_hash'", (snapshot_hash,)
                 )
+
+    def _ensure_schema(self) -> None:
+        """Bootstrap schema exactly when absent; normal worker opens perform no DDL.
+
+        `CREATE INDEX IF NOT EXISTS` still acquires relation locks in Postgres. Running
+        the canonical schema script from every worker connection can therefore
+        deadlock with unrelated project writes even though the index already exists.
+        The operational store has no implicit migrations: once `meta` exists, schema
+        changes belong to an explicit migration step rather than constructor startup.
+        """
+        cursor = self.conn.raw.cursor()
+        cursor.execute("SELECT to_regclass('public.meta')")
+        if cursor.fetchone()[0] is not None:
+            self.conn.commit()
+            return
+
+        cursor.execute("SELECT pg_advisory_lock(%s)", (SCHEMA_BOOTSTRAP_LOCK,))
+        try:
+            cursor.execute("SELECT to_regclass('public.meta')")
+            if cursor.fetchone()[0] is None:
+                self.conn.executescript(
+                    postgres_schema((self.root / "runtime" / "schema.sql").read_text(encoding="utf-8"))
+                )
+                self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
+        finally:
+            unlock = self.conn.raw.cursor()
+            unlock.execute("SELECT pg_advisory_unlock(%s)", (SCHEMA_BOOTSTRAP_LOCK,))
+            self.conn.commit()
 
     def _bump_revision(self) -> int:
         """Atomically allocate one global snapshot revision across all projects."""
@@ -219,27 +252,5 @@ class PostgresStateStore(StateStore):
             return payload
         target = destination.resolve()
         target.parent.mkdir(parents=True, exist_ok=True)
-        temporary = target.with_suffix(target.suffix + ".tmp")
-        serialized = json.dumps(payload, indent=2, sort_keys=True) + "\n"
-        temporary.write_text(serialized, encoding="utf-8")
-        temporary.replace(target)
-        if target == self.snapshot_path.resolve():
-            snapshot_hash = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-            with self.conn:
-                self.conn.execute(
-                    "UPDATE meta SET value = ? WHERE key = 'snapshot_hash'", (snapshot_hash,)
-                )
+        target.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return payload
-
-    def import_snapshot(self, source: Path, expected_revision: int | None = None) -> None:
-        if expected_revision is not None and self.revision != expected_revision:
-            raise LatticeError(
-                f"State revision changed: expected {expected_revision}, current {self.revision}"
-            )
-        snapshot = json.loads(source.read_text(encoding="utf-8"))
-        active_leases = int(
-            self.conn.execute("SELECT COUNT(*) FROM leases WHERE expires_at > ?", (utc_now(),)).fetchone()[0]
-        )
-        if active_leases:
-            raise LatticeError("Cannot import a shared-state checkpoint while action leases are active")
-        self._load_snapshot(snapshot)

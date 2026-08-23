@@ -21,7 +21,7 @@ class PublicBetaPackagingTest(unittest.TestCase):
     def test_capabilities_report_public_and_compatibility_versions_separately(self) -> None:
         result = capabilities(ROOT)
         self.assertEqual(result["format"], "lattice-capabilities")
-        self.assertEqual(result["release"], "0.1.0")
+        self.assertEqual(result["release"], (ROOT / "VERSION").read_text(encoding="utf-8").strip())
         self.assertEqual(result["compatibility"]["agency_version"], "0.0.4")
         self.assertEqual(result["compatibility"]["state_snapshot_schema"], 1)
         self.assertEqual(result["compatibility"]["host_adapter_protocol"], 1)
