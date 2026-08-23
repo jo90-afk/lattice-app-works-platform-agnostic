@@ -16,6 +16,8 @@
 - Added an executable, versioned host-adapter envelope router for claim, complete, event, inspect, and recover operations.
 - Made host-adapter requirements operation-specific so global inspect/recover do not require invented project or host identities.
 - Added cross-project and role guards for hosted completion envelopes.
+- Made hosted completion retries idempotent by replaying the durable completion event for an already-completed lease.
+- Reject missing or path-escaping repository-local project artifacts before a hosted submission mutates project state, preserving the lease for reconciliation and retry.
 - Added the first dependency-free local control surface and `/api/state` projection.
 - Removed legacy process-backlog artifacts and restored a clean neutral seed contract.
 - Added release-version consistency checks so future PRs cannot land with stale README or seed metadata.
