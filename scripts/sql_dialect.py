@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator, Mapping
 
 
 def postgres_sql(sql: str) -> str:
@@ -40,17 +40,37 @@ def postgres_schema(sqlite_schema: str) -> str:
     return rendered.strip() + "\n"
 
 
+class CompatibleRow(Mapping[str, Any]):
+    """Mapping row that also preserves sqlite3.Row integer indexing."""
+
+    def __init__(self, names: list[str], values: Iterable[Any]) -> None:
+        self._names = names
+        self._values = tuple(values)
+        self._mapping = dict(zip(names, self._values))
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._values[key]
+        return self._mapping[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._names)
+
+    def __len__(self) -> int:
+        return len(self._names)
+
+
 @dataclass
 class PostgresCursorAdapter:
     cursor: Any
 
     def fetchone(self):
         row = self.cursor.fetchone()
-        return _row_dict(self.cursor, row)
+        return _compatible_row(self.cursor, row)
 
     def fetchall(self):
         rows = self.cursor.fetchall()
-        return [_row_dict(self.cursor, row) for row in rows]
+        return [_compatible_row(self.cursor, row) for row in rows]
 
 
 class PostgresConnectionAdapter:
@@ -74,7 +94,9 @@ class PostgresConnectionAdapter:
 
     def executescript(self, script: str) -> None:
         cursor = self.raw.cursor()
-        cursor.execute(script)
+        for statement in script.split(";"):
+            if statement.strip():
+                cursor.execute(statement)
         self._in_transaction = True
 
     def commit(self) -> None:
@@ -98,11 +120,13 @@ class PostgresConnectionAdapter:
             self.rollback()
 
 
-def _row_dict(cursor: Any, row: Any):
-    if row is None or isinstance(row, dict):
+def _compatible_row(cursor: Any, row: Any):
+    if row is None or isinstance(row, CompatibleRow):
         return row
+    if isinstance(row, dict):
+        return CompatibleRow(list(row), row.values())
     description = getattr(cursor, "description", None)
     if description and isinstance(row, (tuple, list)):
         names = [column[0] for column in description]
-        return dict(zip(names, row))
+        return CompatibleRow(names, row)
     return row
