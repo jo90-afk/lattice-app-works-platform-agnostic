@@ -20,6 +20,8 @@
 - Made shared snapshot publication explicit with `scripts/shared_state_checkpoint.py`; ordinary Postgres worker mutations no longer require or rewrite a shared checkpoint file.
 - Added a queue-free bounded scheduler that derives assignments from portfolio order, current frontier, available workers, and live portfolio/project/role capacity.
 - Scheduler plans are read-only and Principal actions are never auto-scheduled; dispatch persists only leases granted through the existing atomic host-claim path and continues unrelated projects when one is blocked.
+- Made canonical `agency.yaml` role write domains executable: repository-local submissions are rejected before mutation when the leasing role does not own the artifact path or the path crosses project boundaries.
+- Made the bounded scheduler avoid concurrent same-project roles with overlapping canonical write domains instead of relying on separate leases as a social convention.
 
 ## 0.0.5
 
