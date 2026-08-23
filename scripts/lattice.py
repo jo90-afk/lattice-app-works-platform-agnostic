@@ -54,6 +54,8 @@ def parser() -> argparse.ArgumentParser:
 
     commands.add_parser("validate")
     commands.add_parser("status")
+    doctor = commands.add_parser("doctor")
+    doctor.add_argument("--json", action="store_true")
 
     inspect = commands.add_parser("inspect")
     inspect.add_argument("--project")
@@ -275,6 +277,8 @@ def parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = parser().parse_args()
+    if args.command == "doctor":
+        return run_script("doctor.py", ["--json"] if args.json else [])
     if args.command == "validate":
         return run_script("validate_lattice.py", [])
     if args.command == "initialize":
