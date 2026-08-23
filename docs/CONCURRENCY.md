@@ -4,9 +4,7 @@ Lattice 0.0.6 starts by making ownership semantics explicit before adding a shar
 
 ## Atomic hosted claim
 
-Hosted claims execute under SQLite's `BEGIN IMMEDIATE` writer lock. Frontier derivation, project WIP checks, role WIP checks, and lease insertion therefore occur while competing local writers are serialized. The durable `action_claimed` event remains operational telemetry and does not advance semantic project revision.
-
-This does not turn SQLite into the eventual distributed backend. It establishes the behavior a shared state adapter must preserve.
+Hosted claims execute inside the selected backend's project-write transaction boundary. For SQLite, that boundary is `BEGIN IMMEDIATE`: frontier derivation, project WIP checks, role WIP checks, and lease insertion therefore occur while competing local writers are serialized. The durable `action_claimed` event remains operational telemetry and does not advance semantic project revision.
 
 ## Lease renewal
 
@@ -31,15 +29,30 @@ Example envelope:
 }
 ```
 
-## Storage boundary
+## Operational state backend
 
-SQLite remains the default local runtime. The next concurrency slices will extract the operational transaction boundary and add a Postgres implementation for simultaneous remote writers without changing the portable `state/current.json` snapshot contract.
+`scripts/state_backend.py` defines the transaction boundary used by concurrency-critical operations. It deliberately does not define a second truth model or snapshot format.
 
-A future backend must preserve at least these invariants:
+The current implementations are:
+
+- `SQLiteStateBackend` — default local backend; serializes writers with `BEGIN IMMEDIATE`.
+- `PostgresStateBackend` — reference shared-writer boundary; starts a transaction and acquires a stable project-scoped `pg_advisory_xact_lock` before guarded project writes.
+
+The Postgres adapter accepts a DB-API-style connection and imports no Postgres driver. Local installations therefore retain the standard-library-only runtime. A distributed installation may supply its own compatible driver when the full shared-store constructor is enabled.
+
+The advisory-lock key is derived deterministically from the project ID, so separate runtimes serialize consequential writes to the same project while unrelated projects can proceed independently.
+
+This slice routes claim and lease renewal through the backend interface. Subsequent 0.0.6 work will move the remaining concurrency-sensitive guarded transitions behind the same boundary before enabling a Postgres-backed `StateStore`.
+
+## Invariants
+
+Every operational backend must preserve at least these rules:
 
 - one active lease per action key;
 - project and role WIP limits are checked atomically with lease creation;
 - lease renewal requires the current owner;
 - expired authority cannot be resurrected;
 - semantic revisions are distinct from operational event sequence;
-- acceptance and verification remain guarded state transitions rather than host-side convention.
+- unrelated projects should not share a project-scoped lock in distributed backends;
+- acceptance and verification remain guarded state transitions rather than host-side convention;
+- `state/current.json` remains the portable snapshot contract.

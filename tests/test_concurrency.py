@@ -48,6 +48,7 @@ class ConcurrencyTest(unittest.TestCase):
         )
         first = handle_envelope(self.store, claim)
         self.assertTrue(first["atomic_claim"])
+        self.assertEqual(first["state_backend"], "sqlite")
         second_store = StateStore(ROOT, self.db, self.snapshot)
         try:
             with self.assertRaises(LatticeError):
@@ -72,12 +73,14 @@ class ConcurrencyTest(unittest.TestCase):
             ),
         )
         self.assertEqual(renewed["semantic_revision"], before)
+        self.assertEqual(renewed["state_backend"], "sqlite")
         self.assertEqual(self.store.project_revision("project-001"), before)
         event = self.store.conn.execute(
             "SELECT * FROM events WHERE event_type = 'lease_renewed' AND entity_id = ?",
             (claimed["lease_id"],),
         ).fetchone()
         self.assertIsNotNone(event)
+        self.assertIn('"state_backend":"sqlite"', event["payload_json"])
         with self.assertRaises(LatticeError):
             handle_envelope(
                 self.store,
