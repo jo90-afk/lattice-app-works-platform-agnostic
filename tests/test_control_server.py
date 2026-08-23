@@ -15,7 +15,7 @@ from supervision_model import supervision_model  # noqa: E402
 
 
 class ControlServerTest(unittest.TestCase):
-    def test_rendered_surface_contains_portfolio_and_decision_context_without_actions(self):
+    def test_rendered_surface_contains_portfolio_decision_and_consequence_context_without_actions(self):
         with tempfile.TemporaryDirectory() as temporary:
             folder = Path(temporary)
             with StateStore(ROOT, db_path=folder / "state.db", snapshot_path=folder / "current.json") as store:
@@ -35,6 +35,28 @@ class ControlServerTest(unittest.TestCase):
                     True,
                     milestone_id="milestone-001",
                 )
+                truth = store.add_truth(
+                    "project-001",
+                    "surface.context",
+                    "Project state is available to the supervision surface.",
+                    "observed",
+                    "frontier",
+                    "director",
+                    truth_id="truth-001",
+                )
+                store.add_condition(
+                    "project-001",
+                    "objective-001",
+                    "milestone-001",
+                    "surface.explains",
+                    "Surface explains project causality",
+                    "Expose why work exists and what it affects.",
+                    "application",
+                    "quality",
+                    "director",
+                    truth_ids=[truth["id"]],
+                    condition_id="condition-001",
+                )
                 store.raise_exception(
                     "project-001",
                     "human-boundary",
@@ -52,6 +74,7 @@ class ControlServerTest(unittest.TestCase):
 
             self.assertEqual(model["state_backend"], "sqlite")
             self.assertEqual(model["portfolio"]["active_projects"], 1)
+            self.assertEqual(model["projects"][0]["consequence_graph"]["format"], "lattice-project-consequence-graph")
             self.assertIn("Control Surface Project", page)
             self.assertIn("Make supervision legible", page)
             self.assertIn("Surface is readable", page)
@@ -67,6 +90,10 @@ class ControlServerTest(unittest.TestCase):
             self.assertIn("Operational telemetry", page)
             self.assertIn("Milestone readiness", page)
             self.assertIn("Evidence chain", page)
+            self.assertIn("Consequence graph", page)
+            self.assertIn("premise for", page)
+            self.assertIn("gates", page)
+            self.assertIn("derived for", page)
             self.assertIn("This surface is read-only", page)
             self.assertNotIn("<form", page)
             self.assertNotIn("<button", page)
