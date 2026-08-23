@@ -20,11 +20,11 @@ Use Python 3.10 or newer. The supported first-run path is deliberately linear:
 
 From the repository root, start with:
 
-    python3 scripts/doctor.py
+    python3 scripts/lattice.py doctor
 
 For automation or troubleshooting:
 
-    python3 scripts/doctor.py --json
+    python3 scripts/lattice.py doctor --json
 
 `doctor` checks the Python runtime, required repository layout, release metadata, canonical repository/state validation, local runtime writeability, and the configured state backend. SQLite is the dependency-free default. If `LATTICE_DATABASE_URL` is set, `doctor` also requires `psycopg` and verifies Postgres connectivity without mutating Lattice state.
 
@@ -35,7 +35,7 @@ Then initialize the seed:
       --project-id first-project \
       --project-name "First Project"
 
-Continue with [Initialize the seed](#initialize-the-seed) below, or follow the single end-to-end walkthrough in [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md).
+Continue with [Initialize the seed](#initialize-the-seed) below, or follow the single end-to-end walkthrough in [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md). Public/private repository boundaries, stable 0.1 contracts, cross-platform bootstrap support, and rollback guidance are collected in [`docs/PUBLIC-BETA.md`](docs/PUBLIC-BETA.md).
 
 ## Architecture
 
@@ -100,7 +100,7 @@ Keep `application_platforms` and `cross_platform_strategy` synchronized with the
 
 ## Initialize the seed
 
-Run `python3 scripts/doctor.py` before initialization. Then, from the repository root:
+Run `python3 scripts/lattice.py doctor` before initialization. Then, from the repository root:
 
     python3 scripts/lattice.py initialize \
       --principal-alias "Repository Owner" \
@@ -198,7 +198,7 @@ After initialization:
     git remote add origin https://github.com/<owner>/lattice-app-works.git
     git push -u origin main
 
-Use a private repository for real projects. Commit `state/current.json`; do not commit `.lattice/`.
+Use a private repository for real projects. Commit `state/current.json`; do not commit `.lattice/`. See `docs/PUBLIC-BETA.md` before adding sensitive project state.
 
 ## Privacy
 
