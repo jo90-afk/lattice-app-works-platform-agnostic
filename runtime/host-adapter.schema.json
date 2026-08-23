@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lattice.local/schemas/host-adapter-v1.json",
+  "title": "Lattice Host Adapter Envelope",
+  "type": "object",
+  "required": ["format", "version", "operation", "project_id", "host"],
+  "properties": {
+    "format": {
+      "const": "lattice-host-adapter"
+    },
+    "version": {
+      "const": 1
+    },
+    "operation": {
+      "enum": ["claim", "event", "inspect", "recover"]
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "host": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workspace_id": {
+      "type": ["string", "null"]
+    },
+    "actor": {
+      "type": ["string", "null"]
+    },
+    "role": {
+      "type": ["string", "null"]
+    },
+    "action_key": {
+      "type": ["string", "null"]
+    },
+    "event_type": {
+      "type": ["string", "null"],
+      "enum": [
+        null,
+        "workspace_created",
+        "workspace_abandoned",
+        "policy_checked",
+        "worker_failed",
+        "worker_timed_out"
+      ]
+    },
+    "entity_type": {
+      "type": ["string", "null"]
+    },
+    "entity_id": {
+      "type": ["string", "null"]
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}
