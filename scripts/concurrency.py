@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from control_plane import record_lifecycle_event, recover_expired_leases
+from state_backend import backend_for_store
 from state_engine import LatticeError, StateStore, utc_now
 
 
@@ -25,14 +26,14 @@ def claim_for_host_atomic(
     action_key: str | None = None,
     ttl_minutes: int | None = None,
 ) -> dict[str, Any]:
-    """Acquire SQLite's writer lock before frontier/WIP checks and lease insertion."""
+    """Acquire the backend's project write boundary before granting a lease."""
     recovery = recover_expired_leases(store, project_id)
+    backend = backend_for_store(store)
     try:
-        store.conn.execute("BEGIN IMMEDIATE")
+        backend.begin_project_write(project_id)
         claimed = store.claim(project_id, role, actor, action_key, ttl_minutes)
     except Exception:
-        if store.conn.in_transaction:
-            store.conn.rollback()
+        backend.rollback()
         raise
 
     try:
@@ -52,6 +53,7 @@ def claim_for_host_atomic(
                 "target_id": claimed["action"]["target_id"],
                 "expires_at": claimed["expires_at"],
                 "atomic_claim": True,
+                "state_backend": backend.name,
             },
         )
     except LatticeError as error:
@@ -71,6 +73,7 @@ def claim_for_host_atomic(
                 "reason": "post-claim hook failed",
                 "error": str(error),
                 "atomic_claim": True,
+                "state_backend": backend.name,
             },
             run_hooks=False,
         )
@@ -81,6 +84,7 @@ def claim_for_host_atomic(
     claimed["recovery"] = {"recovered": recovery["recovered"]}
     claimed["hooks"] = event["hooks"]
     claimed["atomic_claim"] = True
+    claimed["state_backend"] = backend.name
     return claimed
 
 
@@ -100,8 +104,9 @@ def renew_host_lease(
     if ttl < 1:
         raise LatticeError("ttl_minutes must be at least 1")
 
+    backend = backend_for_store(store)
     try:
-        store.conn.execute("BEGIN IMMEDIATE")
+        backend.begin_project_write(project_id)
         row = store.conn.execute("SELECT * FROM leases WHERE id = ?", (lease_id,)).fetchone()
         if row is None:
             raise LatticeError("Unknown or expired lease: " + lease_id)
@@ -109,7 +114,7 @@ def renew_host_lease(
         now_text = utc_now()
         if lease["expires_at"] <= now_text:
             store.conn.execute("DELETE FROM leases WHERE id = ?", (lease_id,))
-            store.conn.commit()
+            backend.commit()
             raise LatticeError("Lease expired: " + lease_id)
         if lease["project_id"] != project_id:
             raise LatticeError("Lease project does not match renewal envelope")
@@ -123,10 +128,9 @@ def renew_host_lease(
         current = _parse_utc(lease["expires_at"])
         expires = max(current, candidate).isoformat().replace("+00:00", "Z")
         store.conn.execute("UPDATE leases SET expires_at = ? WHERE id = ?", (expires, lease_id))
-        store.conn.commit()
+        backend.commit()
     except Exception:
-        if store.conn.in_transaction:
-            store.conn.rollback()
+        backend.rollback()
         raise
 
     semantic_revision = store.project_revision(project_id)
@@ -139,6 +143,7 @@ def renew_host_lease(
         "previous_expires_at": lease["expires_at"],
         "expires_at": expires,
         "host": host,
+        "state_backend": backend.name,
     }
     if workspace_id:
         payload["workspace_id"] = workspace_id
@@ -160,4 +165,5 @@ def renew_host_lease(
         "actor": actor,
         "expires_at": expires,
         "semantic_revision": semantic_revision,
+        "state_backend": backend.name,
     }
