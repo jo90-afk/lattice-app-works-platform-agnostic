@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 from concurrency import claim_for_host_atomic
 from lifecycle import fulfill_commitment_action, resolve_exception_action
+from portfolio_dashboard import render_portfolio_html, render_project_html
 from state_engine import LatticeError
 from store_factory import open_state_store
 from supervision import principal_inbox
@@ -228,6 +229,7 @@ def apply_principal_action(store, action_key: str, choice: str, note: str) -> di
 
 
 def render_html(model: dict, flash: str | None = None, flash_error: bool = False) -> str:
+    return render_portfolio_html(model, flash, flash_error)
     inbox = model.get("principal_inbox") or {"count": 0, "blocking_count": 0, "items": []}
     portfolio = model.get("portfolio") or {}
     telemetry = model.get("operational_telemetry") or {}
@@ -256,7 +258,7 @@ def render_html(model: dict, flash: str | None = None, flash_error: bool = False
 
 
 class ControlHandler(BaseHTTPRequestHandler):
-    server_version = "LatticeControl/0.1.2"
+    server_version = "LatticeControl/0.1.3"
 
     def _model(self) -> dict:
         query = parse_qs(urlparse(self.path).query)
@@ -273,6 +275,10 @@ class ControlHandler(BaseHTTPRequestHandler):
                 status, content_type = 200, "application/json; charset=utf-8"
             elif parsed.path in {"/", "/index.html"}:
                 payload = render_html(self._model(), query.get("message", [None])[0], query.get("error", ["0"])[0] == "1").encode()
+                status, content_type = 200, "text/html; charset=utf-8"
+            elif parsed.path == "/project":
+                project_id = query.get("project", [""])[0]
+                payload = render_project_html(self._model(), project_id).encode()
                 status, content_type = 200, "text/html; charset=utf-8"
             elif parsed.path == "/health":
                 payload, status, content_type = b'{"ok":true}\n', 200, "application/json; charset=utf-8"
