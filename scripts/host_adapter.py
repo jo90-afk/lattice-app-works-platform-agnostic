@@ -19,6 +19,7 @@ from lifecycle import (
     review_action,
     submit_action,
 )
+from recovery import replay_completion, validate_project_artifacts
 from state_engine import LatticeError, StateStore
 
 
@@ -86,24 +87,38 @@ def validate_envelope(envelope: dict[str, Any]) -> None:
 
 
 def _complete(store: StateStore, envelope: dict[str, Any]) -> dict[str, Any]:
-    lease = dict(store._require_lease(str(envelope["lease_id"])))
-    if lease["project_id"] != envelope["project_id"]:
-        raise LatticeError("Completion envelope project does not match the leased action")
-    if lease["role"] != envelope["role"]:
-        raise LatticeError("Completion envelope role does not match the leased action")
-    outcome = envelope["outcome"]
-    outcome_type = outcome["type"]
     lease_id = str(envelope["lease_id"])
     role = str(envelope["role"])
+    project_id = str(envelope["project_id"])
+
+    replayed = replay_completion(
+        store,
+        lease_id=lease_id,
+        project_id=project_id,
+        role=role,
+    )
+    if replayed is not None:
+        return replayed
+
+    lease = dict(store._require_lease(lease_id))
+    if lease["project_id"] != project_id:
+        raise LatticeError("Completion envelope project does not match the leased action")
+    if lease["role"] != role:
+        raise LatticeError("Completion envelope role does not match the leased action")
+
+    outcome = envelope["outcome"]
+    outcome_type = outcome["type"]
     if outcome_type == "release":
         return release_action(store, lease_id, role)
     if outcome_type == "submit":
+        artifact_refs = list(outcome.get("artifact_refs") or [])
+        validate_project_artifacts(store.root, project_id, artifact_refs)
         return submit_action(
             store,
             lease_id,
             role,
             str(outcome["summary"]),
-            list(outcome.get("artifact_refs") or []),
+            artifact_refs,
             outcome.get("evidence_ref"),
         )
     if outcome_type == "fail":
