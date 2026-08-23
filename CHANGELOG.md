@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.5
+
+- Reframed Lattice around a durable, host-agnostic control plane rather than competing with coding-agent runtimes.
+- Added the first host-neutral adapter boundary and stable control-plane read model.
+- Added host/workspace-aware claims, durable lifecycle events, and audited expired-lease recovery.
+- Routed the primary claim path through the control plane.
+- Added deterministic, fail-closed lifecycle hooks.
+- Added the first dependency-free local control surface and `/api/state` projection.
+- Removed legacy process-backlog artifacts and restored a clean neutral seed contract.
+- Added release-version consistency checks so future PRs cannot land with stale README or seed metadata.
+
 ## 0.0.4
 
 - Added a selectively loaded, primary-source-grounded expertise library for all 11 agent roles.
