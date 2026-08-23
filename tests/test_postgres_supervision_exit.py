@@ -105,7 +105,6 @@ class PostgresSupervisionExitTest(unittest.TestCase):
                 attempt_budget=1,
             )
 
-            # Doing: authority is currently leased to one worker and remains in flight.
             doing_claim = claim_for_host_atomic(
                 store,
                 project_id="doing-001",
@@ -115,8 +114,6 @@ class PostgresSupervisionExitTest(unittest.TestCase):
                 workspace_id="doing-workspace",
             )
 
-            # Changed: work has passed owner submission, fresh Quality verification,
-            # and Assurance acceptance. Its evidence and accepted change must remain legible.
             changed_claim = claim_for_host_atomic(
                 store,
                 project_id="changed-001",
@@ -164,8 +161,6 @@ class PostgresSupervisionExitTest(unittest.TestCase):
                 "Verified result accepted",
             )
 
-            # Blocked: bounded remediation is exhausted, then an explicit decision
-            # crosses the Principal-only authority boundary.
             blocked_claim = claim_for_host_atomic(
                 store,
                 project_id="blocked-001",
@@ -196,7 +191,6 @@ class PostgresSupervisionExitTest(unittest.TestCase):
             model = supervision_model(store)
             page = render_html(model)
 
-            # One read-only model tells the Principal what the agency is doing.
             projects = {item["project"]["id"]: item for item in model["projects"]}
             self.assertEqual(set(projects), {"doing-001", "changed-001", "blocked-001"})
             self.assertEqual(model["state_backend"], "postgres")
@@ -206,7 +200,6 @@ class PostgresSupervisionExitTest(unittest.TestCase):
             self.assertGreaterEqual(projects["doing-001"]["active_leases"][0]["age_seconds"], 0)
             self.assertGreater(projects["doing-001"]["active_leases"][0]["remaining_seconds"], 0)
 
-            # It tells the Principal what changed and why that state is trusted.
             self.assertEqual(changed_submission["result"]["status"], "pending")
             self.assertEqual(changed_review["result"]["condition"]["status"], "satisfied")
             self.assertEqual(projects["changed-001"]["milestone"], None)
@@ -231,7 +224,6 @@ class PostgresSupervisionExitTest(unittest.TestCase):
             )
             self.assertTrue(any(edge["relation"] == "supports" for edge in changed_graph["edges"]))
 
-            # It tells the Principal where intervention is required and why autonomy stopped.
             blocked_temporal = projects["blocked-001"]["temporal_health"]
             self.assertEqual(len(blocked_temporal["blocked_conditions"]), 1)
             self.assertEqual(blocked_temporal["blocked_conditions"][0]["id"], "condition-blocked-001")
@@ -248,7 +240,6 @@ class PostgresSupervisionExitTest(unittest.TestCase):
                 {"resolve", "leave_open"},
             )
 
-            # Runtime history is visible without reading trace/project files.
             telemetry = model["operational_telemetry"]
             self.assertGreaterEqual(telemetry["claims"], 5)
             self.assertEqual(telemetry["retries"], 1)
@@ -257,25 +248,28 @@ class PostgresSupervisionExitTest(unittest.TestCase):
             self.assertEqual(telemetry["verification_failure_rate"], 0.0)
             self.assertIn("ci", telemetry["hosts"])
 
-            # The human page carries the same answers and remains non-authoritative.
+            # The human page presents the same model as a control loop rather than a state dump.
             for phrase in (
                 "Doing Project",
                 "Changed Project",
                 "Blocked Project",
                 "Decide whether to accept the external consequence",
-                "Why this reached the Principal",
-                "Recent accepted changes",
+                "Why this is yours",
+                "Your decisions",
+                "Working toward",
+                "Now",
+                "Next",
+                "Needs attention",
+                "What changed",
                 "Milestone accepted",
-                "Operational telemetry",
+                "System health",
                 "Oldest attention",
-                "Blocked conditions",
                 "Consequence graph",
-                "verifies",
-                "supports",
+                "If you act",
             ):
                 self.assertIn(phrase, page)
-            self.assertNotIn("<form", page)
-            self.assertNotIn("<button", page)
+            self.assertIn("<form", page)
+            self.assertIn("<button", page)
         finally:
             store.close()
 
