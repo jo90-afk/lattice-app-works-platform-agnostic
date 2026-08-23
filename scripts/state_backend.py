@@ -53,8 +53,11 @@ class PostgresStateBackend:
     name: str = "postgres"
 
     def begin_project_write(self, project_id: str) -> None:
+        # DB-API Postgres drivers begin transactions implicitly on first use.
+        # Reads performed before a guarded write may therefore already have
+        # opened the transaction; acquire the xact-scoped lock in that same
+        # transaction instead of issuing a second BEGIN.
         cursor = self.connection.cursor()
-        cursor.execute("BEGIN")
         cursor.execute("SELECT pg_advisory_xact_lock(%s)", (project_lock_key(project_id),))
 
     def commit(self) -> None:
