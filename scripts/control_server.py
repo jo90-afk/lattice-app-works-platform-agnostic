@@ -47,17 +47,44 @@ def _change_label(change: dict) -> str:
     return labels.get(change["event_type"], change["event_type"].replace("_", " ").title())
 
 
+def _decision_cards(items: list[dict]) -> str:
+    if not items:
+        return "<p class='empty'>No Principal decision required.</p>"
+    cards = []
+    for item in items:
+        affected = item.get("affected_state") or {}
+        objective = affected.get("active_objective") or {}
+        milestone = affected.get("active_milestone") or {}
+        target = affected.get("target") or {}
+        target_state = target.get("state") or {}
+        target_summary = target_state.get("title") or target_state.get("key") or target.get("id") or "No specific target"
+        evidence = item.get("evidence") or []
+        evidence_rows = _rows(
+            evidence,
+            lambda x: x.get("summary") or x.get("entity_id"),
+            lambda x: " · ".join(part for part in [x.get("role"), x.get("source_ref")] if part),
+        ) if evidence else "<li class='empty'>No durable evidence attached to this decision target.</li>"
+        choices = "".join(
+            "<div class='choice'><strong>" + html.escape(choice["label"]) + "</strong><p>" + html.escape(choice["consequence"]) + "</p></div>"
+            for choice in item.get("supported_choices", [])
+        )
+        cards.append(f"""
+<article class='decision-card'>
+<div class='decision-title'><div><p class='eyebrow'>{html.escape(item['kind'])} · {html.escape(item['project_id'])}</p><h3>{html.escape(item['decision_required'])}</h3></div><span class='decision-state'>{'blocking' if item.get('blocking') else 'open'}</span></div>
+<p class='detail'>{html.escape(item.get('detail') or '')}</p>
+<div class='why'><strong>Why this reached the Principal</strong><p>{html.escape(item['authority_reason'])}</p></div>
+<div class='decision-context'><div><span>Active objective</span><strong>{html.escape(str(objective.get('title') or 'None active'))}</strong></div><div><span>Active milestone</span><strong>{html.escape(str(milestone.get('title') or 'None active'))}</strong></div><div><span>Affected target</span><strong>{html.escape(str(target_summary))}</strong></div><div><span>Semantic revision</span><strong>{html.escape(str(affected.get('semantic_revision', '—')))}</strong></div></div>
+<div class='decision-lower'><div><h4>Available evidence</h4><ul>{evidence_rows}</ul></div><div><h4>Supported choices and consequences</h4>{choices}</div></div>
+</article>""")
+    return "".join(cards)
+
+
 def render_html(model: dict) -> str:
     inbox = model.get("principal_inbox") or {"count": 0, "blocking_count": 0, "items": []}
     portfolio = model.get("portfolio") or {}
     telemetry = model.get("operational_telemetry") or {}
     backend = model.get("state_backend", "sqlite")
-
-    inbox_rows = _rows(
-        inbox.get("items", []),
-        lambda x: x["title"],
-        lambda x: f"{x['project_id']} · {x['kind']}" + (f" · {x['severity']}" if x.get("severity") else ""),
-    ) if inbox.get("items") else "<li class='empty'>No Principal decision required.</li>"
+    decision_cards = _decision_cards(inbox.get("items", []))
 
     changes = model.get("recent_accepted_changes") or []
     change_rows = _rows(
@@ -83,9 +110,7 @@ def render_html(model: dict) -> str:
         evidence_rows = _rows(
             evidence,
             lambda x: x.get("condition_title") or x.get("summary") or x.get("entity_id"),
-            lambda x: " · ".join(
-                part for part in [x.get("entity_type"), x.get("role"), x.get("review_verdict"), x.get("source_ref")] if part
-            ),
+            lambda x: " · ".join(part for part in [x.get("entity_type"), x.get("role"), x.get("review_verdict"), x.get("source_ref")] if part),
         )
         projects.append(f"""
 <section class='project'><header><div><p class='eyebrow'>{html.escape(project['status'])}</p><h2>{html.escape(project['name'])}</h2></div><div class='project-meta'><code>{html.escape(project['id'])}</code><span>semantic r{item['semantic_revision']}</span></div></header>
@@ -119,8 +144,8 @@ def render_html(model: dict) -> str:
     ])
 
     return f"""<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Lattice Control Plane</title><style>
-:root{{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#111;color:#eee}}*{{box-sizing:border-box}}body{{margin:0;background:#111;color:#eee}}main{{max-width:1220px;margin:auto;padding:40px 24px 80px}}h1{{font-size:clamp(2rem,5vw,4.5rem);letter-spacing:-.06em;margin:.1em 0}}.lede,.detail{{color:#aaa;line-height:1.5}}.top{{display:flex;justify-content:space-between;gap:24px;align-items:flex-end;margin-bottom:24px}}.revision,code{{font-family:ui-monospace,monospace;color:#999}}.system{{text-align:right}}.backend{{display:inline-block;border:1px solid #3b4a5b;background:#121820;border-radius:999px;padding:6px 10px;color:#9fb6cc;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}}.metrics{{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:0 0 28px}}.metric{{background:#181818;border:1px solid #2b2b2b;border-radius:9px;padding:14px}}.metric span,.project-meta span{{display:block;color:#888;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em}}.metric strong{{display:block;font-size:1.45rem;margin-top:5px}}.principal{{border:1px solid #5b4730;background:#19150f;border-radius:12px;padding:20px;margin:0 0 20px}}.principal h2{{font-size:1.2rem;margin:0}}.principal header,.section-head{{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:8px}}.principal .count{{font-family:ui-monospace,monospace;color:#c7a36f}}.activity{{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:44px}}.activity>article{{min-height:0}}.project{{border-top:1px solid #444;padding:28px 0 36px}}.project header{{display:flex;justify-content:space-between;gap:20px}}.project-meta{{text-align:right}}h2{{font-size:2rem;margin:0}}.eyebrow{{text-transform:uppercase;font-size:.7rem;letter-spacing:.14em;color:#999;margin:0 0 7px}}.current{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:28px 0}}.current div,article{{background:#181818;border:1px solid #2b2b2b;border-radius:10px;padding:18px}}.current span{{display:block;color:#888;font-size:.75rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:7px}}.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}}.evidence-grid{{display:grid;grid-template-columns:1fr 2fr;gap:12px;margin-top:12px}}article{{min-height:180px}}h3{{margin:0 0 14px;font-size:.9rem;text-transform:uppercase;letter-spacing:.08em;color:#aaa;display:flex;justify-content:space-between}}.subhead{{margin-top:22px}}ul{{list-style:none;padding:0;margin:0}}li{{padding:10px 0;border-top:1px solid #2b2b2b}}li:first-child{{border-top:0}}li strong,li span{{display:block}}li span{{font-size:.78rem;color:#888;margin-top:4px}}.empty{{color:#777}}.exceptions{{border-color:#473333}}@media(max-width:950px){{.metrics{{grid-template-columns:repeat(3,1fr)}}.grid{{grid-template-columns:1fr 1fr}}.evidence-grid,.activity{{grid-template-columns:1fr}}}}@media(max-width:560px){{main{{padding:24px 16px 56px}}.top{{display:block}}.system{{text-align:left;margin-top:16px}}.metrics{{grid-template-columns:1fr 1fr}}.current,.grid{{grid-template-columns:1fr}}}}
-</style></head><body><main><div class='top'><div><p class='eyebrow'>Human supervision</p><h1>Lattice</h1><p class='lede'>What the agency is doing, what changed, and where human authority is required. This surface is read-only; authority remains in the guarded state engine.</p></div><div class='system'><span class='backend'>{html.escape(backend)} state</span><div class='revision'>revision {model['revision']} · event {model['event_sequence']}</div></div></div><div class='metrics'>{metrics}</div><section class='principal'><header><div><p class='eyebrow'>Human decision boundary</p><h2>Principal inbox</h2></div><div class='count'>{inbox['count']} open · {inbox['blocking_count']} blocking</div></header><ul>{inbox_rows}</ul></section><section class='activity'><article><h3>Recent accepted changes <b>{len(changes)}</b></h3><ul>{change_rows}</ul></article><article><h3>Operational telemetry</h3><div class='telemetry'>{telemetry_metrics}</div></article></section>{body}</main></body></html>"""
+:root{{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#111;color:#eee}}*{{box-sizing:border-box}}body{{margin:0;background:#111;color:#eee}}main{{max-width:1220px;margin:auto;padding:40px 24px 80px}}h1{{font-size:clamp(2rem,5vw,4.5rem);letter-spacing:-.06em;margin:.1em 0}}.lede,.detail{{color:#aaa;line-height:1.5}}.top{{display:flex;justify-content:space-between;gap:24px;align-items:flex-end;margin-bottom:24px}}.revision,code{{font-family:ui-monospace,monospace;color:#999}}.system{{text-align:right}}.backend{{display:inline-block;border:1px solid #3b4a5b;background:#121820;border-radius:999px;padding:6px 10px;color:#9fb6cc;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}}.metrics{{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:0 0 28px}}.metric{{background:#181818;border:1px solid #2b2b2b;border-radius:9px;padding:14px}}.metric span,.project-meta span,.decision-context span{{display:block;color:#888;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em}}.metric strong{{display:block;font-size:1.45rem;margin-top:5px}}.principal{{border:1px solid #5b4730;background:#19150f;border-radius:12px;padding:20px;margin:0 0 20px}}.principal>header{{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:14px}}.principal h2{{font-size:1.2rem;margin:0}}.principal .count{{font-family:ui-monospace,monospace;color:#c7a36f}}.decision-card{{background:#15120e;border:1px solid #5b4730;min-height:0;margin-top:12px}}.decision-title{{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}}.decision-title h3{{font-size:1.05rem;text-transform:none;letter-spacing:0;color:#eee;margin:0;display:block}}.decision-state{{font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;border:1px solid #704a34;border-radius:999px;padding:5px 8px;color:#d8ad82}}.why{{border-left:2px solid #5b4730;padding-left:12px;margin:16px 0}}.why strong,.decision-lower h4{{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:#aaa}}.why p,.choice p{{color:#aaa;margin:5px 0 0;line-height:1.45;font-size:.86rem}}.decision-context{{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0}}.decision-context div{{background:#1c1813;border-radius:7px;padding:10px}}.decision-context strong{{display:block;margin-top:5px;font-size:.84rem}}.decision-lower{{display:grid;grid-template-columns:1fr 1fr;gap:18px}}.decision-lower h4{{margin:0 0 8px}}.choice{{border-top:1px solid #362b21;padding:9px 0}}.choice:first-of-type{{border-top:0}}.activity{{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:44px}}.activity>article{{min-height:0}}.project{{border-top:1px solid #444;padding:28px 0 36px}}.project header{{display:flex;justify-content:space-between;gap:20px}}.project-meta{{text-align:right}}h2{{font-size:2rem;margin:0}}.eyebrow{{text-transform:uppercase;font-size:.7rem;letter-spacing:.14em;color:#999;margin:0 0 7px}}.current{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:28px 0}}.current div,article{{background:#181818;border:1px solid #2b2b2b;border-radius:10px;padding:18px}}.current span{{display:block;color:#888;font-size:.75rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:7px}}.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}}.evidence-grid{{display:grid;grid-template-columns:1fr 2fr;gap:12px;margin-top:12px}}article{{min-height:180px}}h3{{margin:0 0 14px;font-size:.9rem;text-transform:uppercase;letter-spacing:.08em;color:#aaa;display:flex;justify-content:space-between}}.subhead{{margin-top:22px}}ul{{list-style:none;padding:0;margin:0}}li{{padding:10px 0;border-top:1px solid #2b2b2b}}li:first-child{{border-top:0}}li strong,li span{{display:block}}li span{{font-size:.78rem;color:#888;margin-top:4px}}.empty{{color:#777}}.exceptions{{border-color:#473333}}@media(max-width:950px){{.metrics{{grid-template-columns:repeat(3,1fr)}}.grid{{grid-template-columns:1fr 1fr}}.evidence-grid,.activity,.decision-lower{{grid-template-columns:1fr}}.decision-context{{grid-template-columns:1fr 1fr}}}}@media(max-width:560px){{main{{padding:24px 16px 56px}}.top{{display:block}}.system{{text-align:left;margin-top:16px}}.metrics{{grid-template-columns:1fr 1fr}}.current,.grid,.decision-context{{grid-template-columns:1fr}}}}
+</style></head><body><main><div class='top'><div><p class='eyebrow'>Human supervision</p><h1>Lattice</h1><p class='lede'>What the agency is doing, what changed, and where human authority is required. This surface is read-only; authority remains in the guarded state engine.</p></div><div class='system'><span class='backend'>{html.escape(backend)} state</span><div class='revision'>revision {model['revision']} · event {model['event_sequence']}</div></div></div><div class='metrics'>{metrics}</div><section class='principal'><header><div><p class='eyebrow'>Human decision boundary</p><h2>Principal inbox</h2></div><div class='count'>{inbox['count']} open · {inbox['blocking_count']} blocking</div></header>{decision_cards}</section><section class='activity'><article><h3>Recent accepted changes <b>{len(changes)}</b></h3><ul>{change_rows}</ul></article><article><h3>Operational telemetry</h3><div class='telemetry'>{telemetry_metrics}</div></article></section>{body}</main></body></html>"""
 
 
 class ControlHandler(BaseHTTPRequestHandler):

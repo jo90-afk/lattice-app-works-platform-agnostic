@@ -69,6 +69,24 @@ The projection adds:
 
 The existing project projection remains intact underneath it: objective, milestone, semantic revision, readiness, frontier, active leases, pending verification, exceptions, frontier truths, evidence chain, and recent events.
 
+## Decision-grade Principal inbox
+
+The Principal inbox is not a task list. It contains only open `principal_only` exceptions and open commitments owned by `principal`.
+
+Each item is projected with enough context to decide without reconstructing the project from chat history:
+
+- the exact decision required;
+- the authority rule that prevented an agent role from deciding it;
+- active project, objective, milestone, and semantic revision;
+- the exact durable target state when the exception names one;
+- durable evidence directly attached to that target, including submission/review evidence for condition targets;
+- only choices already supported by the state machine; and
+- the state consequence of each choice.
+
+For a Principal-only exception the supported choices are `resolve` with an explicit durable resolution, or `leave_open`. For a Principal-owned commitment they are `fulfill` with a recorded summary, or `leave_open`. The browser renders those choices and consequences for supervision but still exposes no mutation buttons or forms. A later write interaction must route through the same guarded claim/resolve/fulfill transitions rather than inventing UI authority.
+
+Routine remediation, ordinary verification, and Director-owned commitments remain outside the inbox.
+
 ## Local control surface
 
 Start the dependency-free local server:
@@ -84,13 +102,6 @@ It binds to `127.0.0.1:8765` by default and serves:
 - `/health` — process health.
 
 The server opens state through `scripts/store_factory.py`. Local installations therefore read SQLite by default; shared installations with `LATTICE_DATABASE_URL` read the same authoritative Postgres state used by remote workers. The UI may not silently fall back to a different store.
-
-The Principal inbox is not a task list. It contains only:
-
-- open exceptions explicitly marked `principal_only`; and
-- open commitments whose owner is `principal`.
-
-Routine remediation, ordinary verification, and Director-owned commitments stay out of it. Authority remains in guarded state transitions.
 
 ## Lifecycle hooks
 
@@ -115,4 +126,4 @@ Hooks do not receive a separate state mutation API. Any project-state change mus
 
 ## Validation
 
-The surface is validated against the same repository contract and Postgres-backed concurrency suite as the runtime. Rendering tests also require it to remain read-only: there are no mutation forms or hidden UI write paths.
+The surface is validated against the same repository contract and Postgres-backed concurrency suite as the runtime. Rendering tests also require it to remain read-only: there are no mutation forms, buttons, or hidden UI write paths.
