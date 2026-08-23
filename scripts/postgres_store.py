@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from sql_dialect import PostgresConnectionAdapter, postgres_schema
-from state_backend import PostgresStateBackend
+from state_backend import project_lock_key
 from state_engine import LatticeError, SNAPSHOT_TABLES, StateStore, utc_now
 
 
@@ -88,26 +88,32 @@ class PostgresStateStore(StateStore):
         return int(row[0])
 
     def _project_write(self, project_id: str, operation: Callable[[], Any]) -> Any:
-        """Serialize a direct semantic mutation for one project.
+        """Serialize one whole direct semantic call, including committed readback.
 
-        High-level host wrappers may already hold the same advisory lock. Postgres
-        transaction advisory locks are re-entrant for the owning transaction, so
-        acquiring the canonical project lock here keeps direct StateStore callers
-        safe without creating a separate authority path.
+        Canonical StateStore methods intentionally commit their own transition and
+        may query the committed row again before returning. A transaction advisory
+        lock would be released at that internal commit, allowing the next writer to
+        change the row before the first caller receives its result. A session-level
+        advisory lock spans those internal transaction boundaries and is explicitly
+        released here in all cases.
         """
-        backend = PostgresStateBackend(self.conn.raw)
+        key = project_lock_key(project_id)
+        cursor = self.conn.raw.cursor()
+        cursor.execute("SELECT pg_advisory_lock(%s)", (key,))
         try:
-            backend.begin_project_write(project_id)
             result = operation()
-            # Canonical StateStore methods commit their semantic transition and may
-            # then open a read transaction while producing the portable projection.
-            # A final commit releases either that read transaction or a no-op lock
-            # acquired by a method that returned without mutation.
-            backend.commit()
+            self.conn.commit()
             return result
         except Exception:
-            backend.rollback()
+            self.conn.rollback()
             raise
+        finally:
+            # If the operation failed, rollback above first clears any aborted
+            # transaction so the unlock statement can execute. The explicit commit
+            # makes the adapter transaction state match the underlying connection.
+            unlock = self.conn.raw.cursor()
+            unlock.execute("SELECT pg_advisory_unlock(%s)", (key,))
+            self.conn.commit()
 
     def _project_for_truth(self, truth_id: str) -> str:
         row = self.conn.execute(
@@ -117,9 +123,6 @@ class PostgresStateStore(StateStore):
             raise LatticeError("Unknown truth: " + truth_id)
         return str(row["project_id"])
 
-    # Direct semantic methods are project-serialized intrinsically. Leased action
-    # lifecycle methods already enter the same boundary through lifecycle.py and
-    # hosted_delta.py; those wrappers remain responsible for lease/revision guards.
     def ensure_project(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
         return self._project_write(
             project_id, lambda: super(PostgresStateStore, self).ensure_project(project_id, *args, **kwargs)
@@ -214,7 +217,6 @@ class PostgresStateStore(StateStore):
         payload = self._snapshot_payload()
         if destination is None:
             return payload
-
         target = destination.resolve()
         target.parent.mkdir(parents=True, exist_ok=True)
         temporary = target.with_suffix(target.suffix + ".tmp")
@@ -230,7 +232,6 @@ class PostgresStateStore(StateStore):
         return payload
 
     def import_snapshot(self, source: Path, expected_revision: int | None = None) -> None:
-        """Explicit import remains available but is never performed implicitly on a live store."""
         if expected_revision is not None and self.revision != expected_revision:
             raise LatticeError(
                 f"State revision changed: expected {expected_revision}, current {self.revision}"
