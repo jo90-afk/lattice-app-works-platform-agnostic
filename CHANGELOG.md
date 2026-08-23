@@ -18,6 +18,7 @@
 - Added cross-project and role guards for hosted completion envelopes.
 - Made hosted completion retries idempotent by replaying the durable completion event for an already-completed lease.
 - Reject missing or path-escaping repository-local project artifacts before a hosted submission mutates project state, preserving the lease for reconciliation and retry.
+- Recover expired leases with their recorded host/workspace provenance and automatically record `workspace_abandoned` when the vanished host did not report abandonment itself.
 - Added the first dependency-free local control surface and `/api/state` projection.
 - Removed legacy process-backlog artifacts and restored a clean neutral seed contract.
 - Added release-version consistency checks so future PRs cannot land with stale README or seed metadata.
