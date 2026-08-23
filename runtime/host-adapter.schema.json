@@ -7,7 +7,7 @@
   "properties": {
     "format": {"const": "lattice-host-adapter"},
     "version": {"const": 1},
-    "operation": {"enum": ["claim", "complete", "event", "inspect", "recover"]},
+    "operation": {"enum": ["claim", "renew", "complete", "event", "inspect", "recover"]},
     "project_id": {"type": "string", "minLength": 1},
     "host": {"type": "string", "minLength": 1},
     "workspace_id": {"type": ["string", "null"]},
@@ -52,30 +52,12 @@
       },
       "additionalProperties": false,
       "allOf": [
-        {
-          "if": {"properties": {"type": {"const": "submit"}}},
-          "then": {"required": ["summary"]}
-        },
-        {
-          "if": {"properties": {"type": {"const": "fail"}}},
-          "then": {"required": ["summary"]}
-        },
-        {
-          "if": {"properties": {"type": {"const": "review"}}},
-          "then": {"required": ["verdict", "summary"]}
-        },
-        {
-          "if": {"properties": {"type": {"const": "advance"}}},
-          "then": {"required": ["summary"]}
-        },
-        {
-          "if": {"properties": {"type": {"const": "commitment_fulfill"}}},
-          "then": {"required": ["summary"]}
-        },
-        {
-          "if": {"properties": {"type": {"const": "exception_resolve"}}},
-          "then": {"required": ["resolution"]}
-        }
+        {"if": {"properties": {"type": {"const": "submit"}}}, "then": {"required": ["summary"]}},
+        {"if": {"properties": {"type": {"const": "fail"}}}, "then": {"required": ["summary"]}},
+        {"if": {"properties": {"type": {"const": "review"}}}, "then": {"required": ["verdict", "summary"]}},
+        {"if": {"properties": {"type": {"const": "advance"}}}, "then": {"required": ["summary"]}},
+        {"if": {"properties": {"type": {"const": "commitment_fulfill"}}}, "then": {"required": ["summary"]}},
+        {"if": {"properties": {"type": {"const": "exception_resolve"}}}, "then": {"required": ["resolution"]}}
       ]
     }
   },
@@ -84,6 +66,10 @@
     {
       "if": {"properties": {"operation": {"const": "claim"}}},
       "then": {"required": ["project_id", "host", "actor", "role"]}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "renew"}}},
+      "then": {"required": ["project_id", "host", "lease_id", "actor", "role"]}
     },
     {
       "if": {"properties": {"operation": {"const": "complete"}}},

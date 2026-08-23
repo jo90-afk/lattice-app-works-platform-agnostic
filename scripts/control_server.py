@@ -51,12 +51,7 @@ def render_html(model: dict) -> str:
             evidence,
             lambda x: x.get("condition_title") or x.get("summary") or x.get("entity_id"),
             lambda x: " · ".join(
-                part for part in [
-                    x.get("entity_type"),
-                    x.get("role"),
-                    x.get("review_verdict"),
-                    x.get("source_ref"),
-                ] if part
+                part for part in [x.get("entity_type"), x.get("role"), x.get("review_verdict"), x.get("source_ref")] if part
             ),
         )
         projects.append(f"""
@@ -79,7 +74,7 @@ def render_html(model: dict) -> str:
 
 
 class ControlHandler(BaseHTTPRequestHandler):
-    server_version = "LatticeControl/0.0.5"
+    server_version = "LatticeControl/0.0.6"
 
     def _model(self) -> dict:
         query = parse_qs(urlparse(self.path).query)

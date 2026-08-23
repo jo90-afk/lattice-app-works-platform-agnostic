@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.6
+
+- Made hosted action claims acquire SQLite's writer lock before frontier and WIP checks so lease acquisition is serialized at the durable control boundary.
+- Added explicit host lease renewal with project, role, and actor ownership checks for long-running workers.
+- Added a `renew` host-adapter operation while keeping lease renewal operational: it extends execution authority without advancing semantic project revision.
+
 ## 0.0.5
 
 - Reframed Lattice around a durable, host-agnostic control plane rather than competing with coding-agent runtimes.
@@ -33,7 +39,7 @@
 - Added a selectively loaded, primary-source-grounded expertise library for all 11 agent roles.
 - Replaced the Android-only builder with a platform-neutral Application Engineer while preserving the 11-role and 22-write-domain model.
 - Added open-ended project capability manifests and common Android, Apple, web, Windows, Linux, CLI, and cross-platform expertise packs.
-- Added an expertise resolver that reports unknown platforms without rejecting them or loading the entire library.
+- Added an expertise resolver that reports unknown platforms without rejecting them or loading the library.
 - Included only action-relevant role and platform expertise in scoped ChatGPT Work exports.
 - Added validation and regression coverage for expertise integrity, platform aliases, unknown-platform fallback, and export scoping.
 

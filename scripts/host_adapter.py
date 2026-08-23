@@ -9,7 +9,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from control_plane import claim_for_host, read_model, record_lifecycle_event, recover_expired_leases
+from concurrency import claim_for_host_atomic, renew_host_lease
+from control_plane import read_model, record_lifecycle_event, recover_expired_leases
 from lifecycle import (
     advance_action,
     fail_action,
@@ -27,9 +28,8 @@ from recovery import (
 )
 from state_engine import LatticeError, StateStore
 
-
 ROOT = Path(__file__).resolve().parents[1]
-OPERATIONS = {"claim", "complete", "event", "inspect", "recover"}
+OPERATIONS = {"claim", "renew", "complete", "event", "inspect", "recover"}
 EXTERNAL_EVENTS = {
     "workspace_created",
     "workspace_abandoned",
@@ -49,10 +49,7 @@ OUTCOMES = {
 
 
 def _required(envelope: dict[str, Any], *names: str) -> None:
-    missing = [
-        name for name in names
-        if envelope.get(name) is None or envelope.get(name) == ""
-    ]
+    missing = [name for name in names if envelope.get(name) is None or envelope.get(name) == ""]
     if missing:
         raise LatticeError("Host adapter envelope is missing: " + ", ".join(missing))
 
@@ -67,6 +64,8 @@ def validate_envelope(envelope: dict[str, Any]) -> None:
         raise LatticeError("Unsupported host adapter operation: " + str(operation))
     if operation == "claim":
         _required(envelope, "project_id", "host", "actor", "role")
+    elif operation == "renew":
+        _required(envelope, "project_id", "host", "actor", "role", "lease_id")
     elif operation == "complete":
         _required(envelope, "project_id", "host", "lease_id", "role", "outcome")
         outcome = envelope.get("outcome")
@@ -97,21 +96,12 @@ def _complete(store: StateStore, envelope: dict[str, Any]) -> dict[str, Any]:
     project_id = str(envelope["project_id"])
     outcome = dict(envelope["outcome"])
 
-    replayed = replay_completion(
-        store,
-        lease_id=lease_id,
-        project_id=project_id,
-        role=role,
-    )
+    replayed = replay_completion(store, lease_id=lease_id, project_id=project_id, role=role)
     if replayed is not None:
         return replayed
 
     reconciled = reconcile_interrupted_completion(
-        store,
-        lease_id=lease_id,
-        project_id=project_id,
-        role=role,
-        outcome=outcome,
+        store, lease_id=lease_id, project_id=project_id, role=role, outcome=outcome
     )
     if reconciled is not None:
         return reconciled
@@ -134,12 +124,7 @@ def _complete(store: StateStore, envelope: dict[str, Any]) -> dict[str, Any]:
     if outcome_type == "submit":
         artifact_refs = list(outcome.get("artifact_refs") or [])
         return submit_action(
-            store,
-            lease_id,
-            role,
-            str(outcome["summary"]),
-            artifact_refs,
-            outcome.get("evidence_ref"),
+            store, lease_id, role, str(outcome["summary"]), artifact_refs, outcome.get("evidence_ref")
         )
     if outcome_type == "fail":
         return fail_action(store, lease_id, role, str(outcome["summary"]))
@@ -165,7 +150,7 @@ def handle_envelope(store: StateStore, envelope: dict[str, Any]) -> dict[str, An
     validate_envelope(envelope)
     operation = envelope["operation"]
     if operation == "claim":
-        return claim_for_host(
+        return claim_for_host_atomic(
             store,
             project_id=str(envelope["project_id"]),
             role=str(envelope["role"]),
@@ -173,6 +158,17 @@ def handle_envelope(store: StateStore, envelope: dict[str, Any]) -> dict[str, An
             host=str(envelope["host"]),
             workspace_id=envelope.get("workspace_id"),
             action_key=envelope.get("action_key"),
+            ttl_minutes=envelope.get("ttl_minutes"),
+        )
+    if operation == "renew":
+        return renew_host_lease(
+            store,
+            project_id=str(envelope["project_id"]),
+            lease_id=str(envelope["lease_id"]),
+            role=str(envelope["role"]),
+            actor=str(envelope["actor"]),
+            host=str(envelope["host"]),
+            workspace_id=envelope.get("workspace_id"),
             ttl_minutes=envelope.get("ttl_minutes"),
         )
     if operation == "complete":
@@ -193,11 +189,7 @@ def handle_envelope(store: StateStore, envelope: dict[str, Any]) -> dict[str, An
             payload=payload,
         )
     if operation == "inspect":
-        return read_model(
-            store,
-            envelope.get("project_id"),
-            int(envelope.get("frontier_limit") or 5),
-        )
+        return read_model(store, envelope.get("project_id"), int(envelope.get("frontier_limit") or 5))
     if operation == "recover":
         return recover_expired_leases(store, envelope.get("project_id"))
     raise LatticeError("Unsupported host adapter operation: " + str(operation))
