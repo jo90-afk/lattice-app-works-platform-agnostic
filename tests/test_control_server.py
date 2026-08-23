@@ -15,6 +15,12 @@ class ControlServerTest(unittest.TestCase):
                 store.add_objective('project-001','Make supervision legible','Expose current state.','product',objective_id='objective-001')
                 store.add_milestone('project-001','objective-001','Surface is readable',1,True,milestone_id='milestone-001')
                 page=render_html(read_model(store,'project-001'))
-            self.assertIn('Control Surface Project',page); self.assertIn('Make supervision legible',page); self.assertIn('Surface is readable',page); self.assertIn('This surface is read-only',page); self.assertNotIn('<form',page)
+            self.assertIn('Control Surface Project',page)
+            self.assertIn('Make supervision legible',page)
+            self.assertIn('Surface is readable',page)
+            self.assertIn('Milestone readiness',page)
+            self.assertIn('Evidence chain',page)
+            self.assertIn('This surface is read-only',page)
+            self.assertNotIn('<form',page)
 
 if __name__=='__main__': unittest.main()
