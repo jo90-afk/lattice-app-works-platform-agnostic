@@ -50,3 +50,7 @@ The first surface is intentionally read-only. It shows active objective and mile
 Hooks receive the event envelope as JSON on stdin, run from the repository root in declaration order, and fail closed on a nonzero exit. Commands are executed directly rather than through a shell.
 
 Hooks do not receive a separate state mutation API. Any project-state change must still go through a guarded Lattice operation.
+
+## Validation
+
+This integration is validated against the repository's active seed contract, including capsule/state agreement, machine-readable capabilities, and the absence of legacy process-backlog artifacts.
