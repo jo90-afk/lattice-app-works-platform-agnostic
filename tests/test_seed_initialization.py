@@ -19,8 +19,20 @@ class SeedInitializationTest(unittest.TestCase):
             shutil.copytree(
                 ROOT,
                 target,
-                ignore=shutil.ignore_patterns(".lattice", "__pycache__", "*.pyc"),
+                ignore=shutil.ignore_patterns(".git", ".lattice", "__pycache__", "*.pyc"),
             )
+
+            doctor = subprocess.run(
+                [sys.executable, "scripts/lattice.py", "doctor", "--json"],
+                cwd=target,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(doctor.returncode, 0, doctor.stderr + doctor.stdout)
+            doctor_payload = json.loads(doctor.stdout)
+            self.assertTrue(doctor_payload["ok"])
+            self.assertEqual(doctor_payload["state_backend"], "sqlite")
+
             command = [
                 sys.executable,
                 "scripts/lattice.py",
@@ -48,8 +60,13 @@ class SeedInitializationTest(unittest.TestCase):
 
             created = subprocess.run(
                 [
-                    sys.executable, "scripts/lattice.py", "project-create",
-                    "--project-id", "second-001", "--project-name", "Second Project",
+                    sys.executable,
+                    "scripts/lattice.py",
+                    "project-create",
+                    "--project-id",
+                    "second-001",
+                    "--project-name",
+                    "Second Project",
                 ],
                 cwd=target,
                 text=True,
@@ -66,8 +83,13 @@ class SeedInitializationTest(unittest.TestCase):
 
             activated = subprocess.run(
                 [
-                    sys.executable, "scripts/lattice.py", "project-status",
-                    "--project", "second-001", "--status", "active",
+                    sys.executable,
+                    "scripts/lattice.py",
+                    "project-status",
+                    "--project",
+                    "second-001",
+                    "--status",
+                    "active",
                 ],
                 cwd=target,
                 text=True,
@@ -82,6 +104,23 @@ class SeedInitializationTest(unittest.TestCase):
                 capture_output=True,
             )
             self.assertEqual(validated.returncode, 0, validated.stderr + validated.stdout)
+
+            frontier = subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/lattice.py",
+                    "frontier",
+                    "--project",
+                    "sample-001",
+                    "--limit",
+                    "3",
+                ],
+                cwd=target,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(frontier.returncode, 0, frontier.stderr + frontier.stdout)
+            self.assertEqual(json.loads(frontier.stdout), [])
 
 
 if __name__ == "__main__":
