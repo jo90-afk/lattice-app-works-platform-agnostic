@@ -84,6 +84,18 @@ The router verifies that project and role match the lease before performing the 
 
 Completion uses `scripts/lifecycle.py`, so local CLI and hosted execution share the same state mutation and post-transition telemetry semantics.
 
+### Retry safety
+
+A host may retry the same completion envelope after losing the response. Lattice searches the durable completion event stream by `lease_id` before requiring the ephemeral lease. If that lease already has a committed completion event, the adapter returns a replay acknowledgement with `replayed: true` and the original durable completion event instead of executing the transition again.
+
+This makes ordinary network and process retries idempotent without introducing a completion queue. A replay must still match the project and role recorded on the original completion.
+
+### Repository artifact reconciliation
+
+For `submit`, any artifact reference inside `projects/<project-id>/...` is treated as a repository-local artifact that must already exist before the semantic submission transition. Missing or path-escaping project artifacts are rejected before mutation, and the lease remains active so the host can reconcile the files and retry.
+
+Opaque or external artifact references are not interpreted as repository paths by this check. The host remains responsible for reconciling its isolated workspace into the repository before declaring project-local artifacts complete.
+
 ## External runtime events
 
 Hosts may report only operational events that do not assert governed project truth:
