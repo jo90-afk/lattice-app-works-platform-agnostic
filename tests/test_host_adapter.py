@@ -40,6 +40,31 @@ class HostAdapterTest(unittest.TestCase):
     def base(self, operation: str) -> dict:
         return {"format": "lattice-host-adapter", "version": 1, "operation": operation}
 
+    def claim(self) -> dict:
+        return handle_envelope(
+            self.store,
+            self.base("claim") | {
+                "project_id": "project-001",
+                "host": "codex",
+                "workspace_id": "worktree-1",
+                "actor": "builder-1",
+                "role": "application",
+            },
+        )
+
+    def submit_envelope(self, lease_id: str, artifacts: list[str] | None = None) -> dict:
+        return self.base("complete") | {
+            "project_id": "project-001",
+            "host": "codex",
+            "lease_id": lease_id,
+            "role": "application",
+            "outcome": {
+                "type": "submit",
+                "summary": "Adapter result",
+                "artifact_refs": artifacts if artifacts is not None else ["artifact.txt"],
+            },
+        }
+
     def test_global_inspect_and_recover_do_not_require_host_or_project(self) -> None:
         inspected = handle_envelope(self.store, self.base("inspect"))
         self.assertEqual(inspected["format"], "lattice-control-read-model")
@@ -48,26 +73,8 @@ class HostAdapterTest(unittest.TestCase):
         self.assertEqual(recovered["recovered"], 0)
 
     def test_claim_and_complete_share_one_guarded_runtime_path(self) -> None:
-        claim = self.base("claim") | {
-            "project_id": "project-001",
-            "host": "codex",
-            "workspace_id": "worktree-1",
-            "actor": "builder-1",
-            "role": "application",
-        }
-        claimed = handle_envelope(self.store, claim)
-        complete = self.base("complete") | {
-            "project_id": "project-001",
-            "host": "codex",
-            "lease_id": claimed["lease_id"],
-            "role": "application",
-            "outcome": {
-                "type": "submit",
-                "summary": "Adapter result",
-                "artifact_refs": ["artifact.txt"],
-            },
-        }
-        completed = handle_envelope(self.store, complete)
+        claimed = self.claim()
+        completed = handle_envelope(self.store, self.submit_envelope(claimed["lease_id"]))
         self.assertEqual(completed["result"]["status"], "pending")
         self.assertEqual(completed["lifecycle"]["event_type"], "action_submitted")
         event_types = [
@@ -79,17 +86,49 @@ class HostAdapterTest(unittest.TestCase):
         self.assertIn("action_claimed", event_types)
         self.assertIn("action_submitted", event_types)
 
+    def test_duplicate_completion_replays_without_duplicate_state_mutation(self) -> None:
+        claimed = self.claim()
+        envelope = self.submit_envelope(claimed["lease_id"])
+        first = handle_envelope(self.store, envelope)
+        second = handle_envelope(self.store, envelope)
+        self.assertFalse(first.get("replayed", False))
+        self.assertTrue(second["replayed"])
+        self.assertTrue(second["already_committed"])
+        self.assertEqual(second["completion"]["event_type"], "action_submitted")
+        submission_count = self.store.conn.execute(
+            "SELECT COUNT(*) FROM submissions WHERE condition_id = 'condition-001'"
+        ).fetchone()[0]
+        completion_count = self.store.conn.execute(
+            "SELECT COUNT(*) FROM events WHERE event_type = 'action_submitted'"
+        ).fetchone()[0]
+        self.assertEqual(submission_count, 1)
+        self.assertEqual(completion_count, 1)
+
+    def test_missing_repo_artifact_rejects_before_mutation_and_preserves_lease(self) -> None:
+        claimed = self.claim()
+        envelope = self.submit_envelope(
+            claimed["lease_id"],
+            ["projects/project-001/platform/missing-result.txt"],
+        )
+        with self.assertRaises(LatticeError):
+            handle_envelope(self.store, envelope)
+        condition = self.store.conn.execute(
+            "SELECT status, attempt_count FROM conditions WHERE id = 'condition-001'"
+        ).fetchone()
+        lease = self.store.conn.execute(
+            "SELECT id FROM leases WHERE id = ?", (claimed["lease_id"],)
+        ).fetchone()
+        submission_count = self.store.conn.execute(
+            "SELECT COUNT(*) FROM submissions WHERE condition_id = 'condition-001'"
+        ).fetchone()[0]
+        self.assertEqual(condition["status"], "unknown")
+        self.assertEqual(condition["attempt_count"], 0)
+        self.assertIsNotNone(lease)
+        self.assertEqual(submission_count, 0)
+
     def test_completion_cannot_cross_project_boundary(self) -> None:
         self.store.ensure_project("project-002", "Other Project")
-        claimed = handle_envelope(
-            self.store,
-            self.base("claim") | {
-                "project_id": "project-001",
-                "host": "local",
-                "actor": "builder-1",
-                "role": "application",
-            },
-        )
+        claimed = self.claim()
         with self.assertRaises(LatticeError):
             handle_envelope(
                 self.store,
