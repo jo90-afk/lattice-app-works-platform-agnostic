@@ -1,0 +1,52 @@
+name: Temporary active portfolio filter patch
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'fix/0.1.4-active-portfolio-filter'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/0.1.4-active-portfolio-filter
+      - name: Apply active portfolio filtering
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+
+          p = Path('scripts/portfolio_dashboard.py')
+          s = p.read_text()
+          old = '    projects = model.get("projects") or []\n'
+          new = '    projects = [item for item in (model.get("projects") or []) if (item.get("project") or {}).get("status") == "active"]\n'
+          if old not in s:
+              raise SystemExit('portfolio project list marker missing')
+          p.write_text(s.replace(old, new, 1))
+
+          Path('VERSION').write_text('0.1.4\n')
+          readme = Path('README.md').read_text().replace('# Lattice App Works 0.1.3', '# Lattice App Works 0.1.4', 1)
+          Path('README.md').write_text(readme)
+          manifest_path = Path('seed/SEED-MANIFEST.json')
+          manifest = json.loads(manifest_path.read_text())
+          manifest['version'] = '0.1.4'
+          manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
+          c = Path('scripts/control_server.py')
+          cs = c.read_text().replace('server_version = "LatticeControl/0.1.3"', 'server_version = "LatticeControl/0.1.4"', 1)
+          c.write_text(cs)
+          changelog = Path('CHANGELOG.md').read_text()
+          entry = '''## 0.1.4\n\n- Active portfolio rendering now excludes inactive/seed/history projects so the project cards agree with the active-project summary and navigation counts.\n\n'''
+          if '## 0.1.4' not in changelog:
+              changelog = changelog.replace('# Changelog\n\n', '# Changelog\n\n' + entry, 1)
+          Path('CHANGELOG.md').write_text(changelog)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add scripts/portfolio_dashboard.py scripts/control_server.py VERSION README.md seed/SEED-MANIFEST.json CHANGELOG.md
+          git commit -m "Filter portfolio to active projects"
+          git push origin HEAD:fix/0.1.4-active-portfolio-filter
