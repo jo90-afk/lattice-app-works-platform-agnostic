@@ -63,7 +63,7 @@ class HostAdapterTest(unittest.TestCase):
             "outcome": {
                 "type": "submit",
                 "summary": "Adapter result",
-                "artifact_refs": artifacts if artifacts is not None else ["artifact.txt"],
+                "artifact_refs": artifacts if artifacts is not None else ["artifact://adapter-result"],
             },
         }
 
@@ -112,14 +112,11 @@ class HostAdapterTest(unittest.TestCase):
         envelope = self.submit_envelope(claimed["lease_id"])
         lease = dict(self.store._require_lease(claimed["lease_id"]))
         begin_completion(self.store, lease=lease, outcome=envelope["outcome"])
-
-        # Simulate process loss after StateStore committed but before lifecycle.py
-        # could append action_submitted telemetry.
         semantic_result = self.store.submit(
             claimed["lease_id"],
             "application",
             "Adapter result",
-            ["artifact.txt"],
+            ["artifact://adapter-result"],
         )
         self.assertEqual(semantic_result["status"], "pending")
         before = self.store.conn.execute(
@@ -151,7 +148,6 @@ class HostAdapterTest(unittest.TestCase):
         envelope = self.submit_envelope(claimed["lease_id"])
         lease = dict(self.store._require_lease(claimed["lease_id"]))
         begin_completion(self.store, lease=lease, outcome=envelope["outcome"])
-
         result = handle_envelope(self.store, envelope)
         self.assertEqual(result["result"]["status"], "pending")
         starts = self.store.conn.execute(
