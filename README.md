@@ -1,4 +1,4 @@
-# Lattice App Works 0.0.6
+# Lattice App Works 0.0.7
 
 Lattice is a platform-agnostic, multi-project AI software agency built around an active frontier rather than a task backlog. It stores durable project state, truth, evidence, commitments, and exceptions; it derives the next few executable actions only when an agent asks for them.
 
@@ -12,10 +12,19 @@ The repository is a sanitized seed. It contains no real person's data or project
 | Expertise Library | `expertise/` | Selectively loaded role playbooks and project-declared application platform packs |
 | Portfolio | `portfolio/` | Principal alias, project identity, priority, capacity |
 | Project Capsules | `projects/<project-id>/` | Product artifacts, code, tests, mandate, human-facing evidence |
-| Operational State | `state/current.json` | Git-friendly objectives, conditions, truths, evidence, commitments, exceptions, events |
-| Local Index | `.lattice/state.db` | SQLite indexes and expiring leases; generated and ignored by Git |
+| Portable State | `state/current.json` | Git-friendly snapshot of objectives, conditions, truths, evidence, commitments, exceptions, events |
+| Local Runtime | `.lattice/state.db` | SQLite operational state and expiring leases; generated and ignored by Git |
+| Shared Runtime | Postgres via `LATTICE_DATABASE_URL` | Optional simultaneous remote writers with project-scoped concurrency semantics |
 
-The runtime uses only Python's standard library and SQLite.
+SQLite remains the dependency-free local default. Shared deployments may install `psycopg` and use Postgres without changing the portable snapshot contract.
+
+## Human control surface
+
+0.0.7 builds a local-first supervision surface over canonical state. It is read-only: the UI does not create a second authority path.
+
+    python3 scripts/control_server.py
+
+Open `http://127.0.0.1:8765`. The surface uses the same configured state backend as hosted workers, including Postgres when `LATTICE_DATABASE_URL` is set. It shows portfolio state, active work, verification, readiness, evidence, Principal-only decisions, recent accepted changes, and operational telemetry. Machine-readable supervision state is available at `/api/state`.
 
 ## Roadmap
 
