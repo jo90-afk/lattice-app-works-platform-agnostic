@@ -13,6 +13,7 @@ from hooks import dispatch_hooks
 from provenance import claim_provenance
 from state_backend import backend_for_store
 from state_engine import LatticeError, StateStore
+from write_ownership import validate_artifact_ownership
 
 ROOT = Path(__file__).resolve().parents[1]
 ACTION_EVENTS = {
@@ -177,6 +178,10 @@ def submit_action(
     artifact_refs: list[str],
     evidence_ref: str | None = None,
 ) -> dict[str, Any]:
+    lease = _lease_context(store, lease_id)
+    if lease["role"] != role:
+        raise LatticeError("Lease does not authorize artifact submission for this role")
+    validate_artifact_ownership(store.root, str(lease["project_id"]), role, artifact_refs)
     return _finish(
         store,
         lease_id,
