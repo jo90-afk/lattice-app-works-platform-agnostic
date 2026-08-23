@@ -186,7 +186,7 @@ def _styles() -> str:
 def render_portfolio_html(model: dict, flash: str | None = None, flash_error: bool = False) -> str:
     portfolio = model.get("portfolio") or {}
     inbox = model.get("principal_inbox") or {"count": 0, "items": []}
-    projects = model.get("projects") or []
+    projects = [item for item in (model.get("projects") or []) if (item.get("project") or {}).get("status") == "active"]
     principal_by_project: dict[str, list[dict]] = {}
     for decision in inbox.get("items") or []:
         principal_by_project.setdefault(str(decision.get("project_id")), []).append(decision)
