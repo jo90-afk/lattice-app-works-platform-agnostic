@@ -28,6 +28,7 @@
 - Made Postgres global snapshot revision allocation atomic with `UPDATE ... RETURNING`, preserving distinct monotonic revisions when unrelated projects mutate concurrently under different project advisory locks.
 - Made direct Postgres semantic mutations intrinsically acquire the canonical project advisory lock, so project status, objectives, milestones, records, truths, readiness conditions, commitments, and exceptions cannot bypass shared-writer serialization.
 - Added a live Postgres same-record race proving concurrent direct writers become successive versions rather than duplicate-version failures or lost updates.
+- Added an integrated live-Postgres exit scenario proving the queue-free scheduler can dispatch three projects and carry concurrent application, independent verification, and Assurance workers through to three coherent accepted milestones with no residual leases or frontier work.
 
 ## 0.0.5
 
