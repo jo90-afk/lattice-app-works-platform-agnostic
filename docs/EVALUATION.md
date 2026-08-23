@@ -46,7 +46,7 @@ The harness rejects impossible relationships such as more false acceptances than
 
 ## Executable scenarios
 
-`scripts/evaluation_scenarios.py` runs bounded scenarios against a fresh temporary Lattice store and emits a validated result object. The initial production-path set is:
+`scripts/evaluation_scenarios.py` runs bounded scenarios against a fresh temporary Lattice store and emits a validated result object:
 
 ```bash
 python3 scripts/evaluation_scenarios.py greenfield-feature-delivery
@@ -90,6 +90,28 @@ Three active projects compete for three available Application workers under a te
 
 The evaluation registry used here is an evaluation input, not a replacement for the repository portfolio registry.
 
+## Delivery, migration, and remediation scenarios
+
+`scripts/evaluation_delivery_scenarios.py` closes the remaining roadmap classes with governed multi-step delivery behavior:
+
+```bash
+python3 scripts/evaluation_delivery_scenarios.py cross-component-refactor
+python3 scripts/evaluation_delivery_scenarios.py migration-work
+python3 scripts/evaluation_delivery_scenarios.py ci-remediation
+```
+
+### Cross-component refactor
+
+Application and Services each receive their own readiness condition, both linked to one Architecture-owned contract record. Each role submits only its own component result. Quality independently verifies both submissions, recording contract version 1 as the accepted input for each condition. Assurance may accept only after both conditions are satisfied. The scenario therefore tests coordinated change without merging ownership or allowing one component's completion to stand in for the other.
+
+### Migration work
+
+The implementation is first submitted and independently verified against contract version 1. Architecture then advances the governed contract to version 2 through an ordinary record revision. That revision must invalidate the previously satisfied condition and increment its state version; the old accepted record version remains historical evidence but cannot satisfy the current condition. A new owner submission and Quality review must bind acceptance to contract version 2 before Assurance can accept the milestone. Carrying the v1 acceptance forward would be recorded as state divergence.
+
+### CI remediation
+
+The first owner attempt fails through the normal bounded failure path. Because the retry budget is not exhausted, the condition returns to `unmet`, no exception is raised, and the action is re-derived without Principal intervention. A second bounded attempt submits the correction, Quality verifies it, and Assurance accepts. This distinguishes routine remediation from exception-worthy failure and tests that retry state is durable rather than reconstructed from conversation history.
+
 ## Live Postgres conflict evaluation
 
 `scripts/evaluation_postgres_scenarios.py` exercises shared-writer semantics against a real Postgres store after the optional driver is installed:
@@ -102,7 +124,7 @@ Two hosted deltas are prepared from the same observed project revision and appli
 
 The stale-delta rejection is **not** counted as a verification catch. It is evidence that guarded shared-writer serialization prevented an accepted-state divergence. Quality's later review remains a separate verification event. A passing run therefore records zero state-divergence incidents, zero false acceptances, and no synthetic verification defect/catch pair.
 
-CI executes the six local/adversarial scenarios first and fails closed on any failed result. After installing the Postgres driver, CI runs the concurrent-artifact-conflict scenario and feeds all seven results through `scripts/evaluation_gate.py` before the ordinary regression suite.
+CI runs nine dependency-free scenarios first and fails closed on any failed result. After installing the optional Postgres driver it runs the concurrent-artifact-conflict scenario and feeds all ten registered roadmap results through `scripts/evaluation_gate.py`. The ordinary regression suite runs only after the complete ten-scenario evidence gate passes.
 
 ## Semantic fingerprints
 
@@ -114,7 +136,7 @@ The narrower acceptance fingerprint includes milestone status, condition status/
 
 Evaluation scenarios use deterministic IDs for durable seeded entities. Generated runtime identities are intentionally not part of either fingerprint. A test runs the same greenfield scenario under different host labels and requires identical state and acceptance fingerprints.
 
-This establishes the comparison mechanism; it does **not** yet claim that distinct external host adapters have been proven portable. Later 0.0.8 slices must run the same bounded scenario through genuinely different supported host paths.
+This establishes the comparison mechanism; it does **not** yet claim that distinct external host adapters have been proven portable. Host-adapter portability remains a separate evaluation dimension rather than being inferred from a changed host label.
 
 ## Summary metrics
 
@@ -145,7 +167,7 @@ When the same scenario appears for more than one host, the summary compares `sta
 
 A host may use different workspaces, tools, models, or execution strategies. Lattice's claim is narrower: host-specific execution must not change the durable state meaning or acceptance semantics of the bounded scenario.
 
-The fingerprint and result contracts are executable. Distinct host-adapter evaluation remains explicit future 0.0.8 work rather than being inferred from a changed host label.
+The fingerprint and result contracts are executable. Distinct host-adapter evaluation remains explicit work rather than being inferred from a changed host label.
 
 ## Evidence discipline
 

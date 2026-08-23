@@ -16,7 +16,10 @@
 - Made the executable evaluation aggregate fail closed when any scenario result reports `outcome: failed`; successful process execution alone cannot make a failed evaluation pass CI.
 - Added a live-Postgres concurrent-artifact-conflict evaluation that races two hosted deltas prepared from one observed revision, requires one durable winner and one stale rejection, then independently verifies the surviving submission.
 - Kept concurrency rejection separate from verification metrics: serialization proves zero accepted-state divergence, while Quality verification remains a distinct evidence event rather than inheriting a synthetic catch.
-- Expanded the CI evidence aggregate to seven executable roadmap scenarios, including the real multi-connection Postgres race, before the full regression suite.
+- Added a cross-component-refactor evaluation where Application and Services preserve one Architecture-owned contract and both require independent Quality verification before Assurance acceptance.
+- Added a migration evaluation that proves a governed contract revision invalidates earlier satisfaction, preserves the old accepted version as provenance, and requires fresh verification against the new version before acceptance.
+- Added a CI-remediation evaluation that exercises bounded failure, durable retry state, corrected resubmission, independent verification, and successful acceptance without premature escalation.
+- Expanded the fail-closed CI evidence gate to all ten registered 0.0.8 roadmap scenarios, including the real multi-connection Postgres race, before the full regression suite.
 
 ## 0.0.7
 
