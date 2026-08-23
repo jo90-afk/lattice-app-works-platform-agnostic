@@ -14,6 +14,7 @@ from typing import Any, Iterable
 from concurrency import claim_for_host_atomic
 from state_engine import LatticeError, StateStore, utc_now
 from store_factory import open_state_store
+from write_ownership import roles_conflict
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -39,13 +40,11 @@ class Worker:
 
 
 def parse_registry(registry_path: Path) -> tuple[list[str], int]:
-    """Read portfolio order and specialist capacity from the human registry."""
     text = registry_path.read_text(encoding="utf-8")
     capacity_match = re.search(r"\*\*Concurrency limit:\*\*\s*(\d+)\s+specialist", text, re.I)
     capacity = int(capacity_match.group(1)) if capacity_match else 3
     if capacity < 1:
         raise LatticeError("Portfolio concurrency limit must be at least 1")
-
     project_ids: list[str] = []
     for line in text.splitlines():
         stripped = line.strip()
@@ -120,6 +119,10 @@ def _active_project_roles(store: StateStore, project_id: str) -> set[str]:
     }
 
 
+def _conflicts_with_roles(store: StateStore, project_id: str, role: str, others: set[str]) -> bool:
+    return any(roles_conflict(store.root, project_id, role, other) for other in others)
+
+
 def candidate_plan(
     store: StateStore,
     workers: Iterable[Worker],
@@ -141,14 +144,8 @@ def candidate_plan(
     project_slots = {project_id: _project_slots(store, project_id) for project_id in projects}
     project_planned = {project_id: 0 for project_id in projects}
     unavailable_roles = {project_id: _active_project_roles(store, project_id) for project_id in projects}
+    project_actions = {project_id: store.frontier(project_id, None, 1000) for project_id in projects}
 
-    # Portfolio order is the primary sort. Frontier score already captures
-    # readiness/risk/priority inside a project. Repeated passes give each project
-    # one opportunity before a higher-ranked project consumes another slot.
-    project_actions = {
-        project_id: store.frontier(project_id, None, 1000)
-        for project_id in projects
-    }
     while len(assignments) < capacity:
         made_assignment = False
         for project_id in projects:
@@ -161,7 +158,7 @@ def candidate_plan(
                 (
                     item for item in actions
                     if item["role"] != "principal"
-                    and item["role"] not in unavailable_roles[project_id]
+                    and not _conflicts_with_roles(store, project_id, item["role"], unavailable_roles[project_id])
                     and not any(existing["action"]["action_key"] == item["action_key"] for existing in assignments)
                     and any(
                         worker.actor not in used_workers and worker.role == item["role"]
@@ -221,7 +218,6 @@ def dispatch(
     limit: int | None = None,
     ttl_minutes: int | None = None,
 ) -> dict[str, Any]:
-    """Claim the current bounded plan; only successful claims become durable."""
     plan = candidate_plan(store, workers, registry_path=registry_path, limit=limit)
     claims: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
