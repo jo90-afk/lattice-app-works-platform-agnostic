@@ -6,9 +6,10 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from sql_dialect import PostgresConnectionAdapter, postgres_schema
+from state_backend import PostgresStateBackend
 from state_engine import LatticeError, SNAPSHOT_TABLES, StateStore, utc_now
 
 
@@ -37,7 +38,7 @@ SNAPSHOT_ORDER = {
 
 
 class PostgresStateStore(StateStore):
-    """Run the guarded StateStore semantics on a supplied Postgres connection.
+    """Run canonical StateStore semantics with intrinsic project serialization.
 
     Postgres is the operational authority after bootstrap. A repository snapshot is
     imported automatically only into an empty operational store. Implicit exports
@@ -85,6 +86,102 @@ class PostgresStateStore(StateStore):
         if row is None:
             raise LatticeError("Postgres state meta has no revision row")
         return int(row[0])
+
+    def _project_write(self, project_id: str, operation: Callable[[], Any]) -> Any:
+        """Serialize a direct semantic mutation for one project.
+
+        High-level host wrappers may already hold the same advisory lock. Postgres
+        transaction advisory locks are re-entrant for the owning transaction, so
+        acquiring the canonical project lock here keeps direct StateStore callers
+        safe without creating a separate authority path.
+        """
+        backend = PostgresStateBackend(self.conn.raw)
+        try:
+            backend.begin_project_write(project_id)
+            result = operation()
+            # Canonical StateStore methods commit their semantic transition and may
+            # then open a read transaction while producing the portable projection.
+            # A final commit releases either that read transaction or a no-op lock
+            # acquired by a method that returned without mutation.
+            backend.commit()
+            return result
+        except Exception:
+            backend.rollback()
+            raise
+
+    def _project_for_truth(self, truth_id: str) -> str:
+        row = self.conn.execute(
+            "SELECT project_id FROM truths WHERE id = ?", (truth_id,)
+        ).fetchone()
+        if row is None:
+            raise LatticeError("Unknown truth: " + truth_id)
+        return str(row["project_id"])
+
+    # Direct semantic methods are project-serialized intrinsically. Leased action
+    # lifecycle methods already enter the same boundary through lifecycle.py and
+    # hosted_delta.py; those wrappers remain responsible for lease/revision guards.
+    def ensure_project(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).ensure_project(project_id, *args, **kwargs)
+        )
+
+    def set_project_status(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).set_project_status(project_id, *args, **kwargs)
+        )
+
+    def add_objective(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).add_objective(project_id, *args, **kwargs)
+        )
+
+    def add_milestone(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).add_milestone(project_id, *args, **kwargs)
+        )
+
+    def put_record(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).put_record(project_id, *args, **kwargs)
+        )
+
+    def add_truth(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).add_truth(project_id, *args, **kwargs)
+        )
+
+    def revise_truth(self, truth_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        project_id = self._project_for_truth(truth_id)
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).revise_truth(truth_id, *args, **kwargs)
+        )
+
+    def move_truth(self, truth_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        project_id = self._project_for_truth(truth_id)
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).move_truth(truth_id, *args, **kwargs)
+        )
+
+    def link_truths(self, from_truth_id: str, *args: Any, **kwargs: Any) -> None:
+        project_id = self._project_for_truth(from_truth_id)
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).link_truths(from_truth_id, *args, **kwargs)
+        )
+
+    def add_condition(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).add_condition(project_id, *args, **kwargs)
+        )
+
+    def add_commitment(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).add_commitment(project_id, *args, **kwargs)
+        )
+
+    def raise_exception(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).raise_exception(project_id, *args, **kwargs)
+        )
 
     def _load_snapshot(self, snapshot: dict[str, Any]) -> None:
         super()._load_snapshot(snapshot)
