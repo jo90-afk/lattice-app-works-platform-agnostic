@@ -33,9 +33,9 @@ jobs:
           mkdir -p projects/demo-project/ops projects/demo-project/quality
           printf 'reproducible build\n' > projects/demo-project/ops/build.md
           printf 'build check passed\n' > projects/demo-project/quality/build-check.txt
-          RELEASE_LEASE=$(python3 scripts/lattice.py claim --project demo-project --role release --actor release-demo | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("lease") or d)["id"])')
+          RELEASE_LEASE=$(python3 scripts/lattice.py claim --project demo-project --role release --actor release-demo | python3 -c 'import json,sys; print(json.load(sys.stdin)["lease_id"])')
           python3 scripts/lattice.py submit --lease "$RELEASE_LEASE" --role release --summary "Build is reproducible" --artifact projects/demo-project/ops/build.md --evidence-ref projects/demo-project/quality/build-check.txt
-          QUALITY_LEASE=$(python3 scripts/lattice.py claim --project demo-project --role quality --actor quality-demo | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("lease") or d)["id"])')
+          QUALITY_LEASE=$(python3 scripts/lattice.py claim --project demo-project --role quality --actor quality-demo | python3 -c 'import json,sys; print(json.load(sys.stdin)["lease_id"])')
           python3 scripts/lattice.py review --lease "$QUALITY_LEASE" --role quality --verdict SATISFIED --summary "Independent build verification passed" --evidence-ref projects/demo-project/quality/build-check.txt
           python3 scripts/lattice.py claim --project demo-project --role application --actor application-demo --workspace workspace-ui-demo > /tmp/application-claim.json
           python3 scripts/lattice.py exception-raise --project demo-project --dedupe-key demo.release-risk --title "Confirm public-beta release boundary" --detail "This representative exception requires the Principal to confirm the release boundary." --severity major --owner-role director --principal-only --target-type milestone --target-id milestone-001 --role director
