@@ -5,6 +5,9 @@
 - Made hosted action claims acquire SQLite's writer lock before frontier and WIP checks so lease acquisition is serialized at the durable control boundary.
 - Added explicit host lease renewal with project, role, and actor ownership checks for long-running workers.
 - Added a `renew` host-adapter operation while keeping lease renewal operational: it extends execution authority without advancing semantic project revision.
+- Extracted a concurrency-critical state-backend transaction interface with SQLite and Postgres implementations.
+- Added a deterministic project-scoped Postgres advisory-lock key so distributed writers can serialize one project's guarded writes without globally blocking unrelated projects.
+- Kept Postgres driver selection outside the local-first core; the reference backend accepts a DB-API-style connection and adds no mandatory dependency.
 
 ## 0.0.5
 
