@@ -1,0 +1,113 @@
+name: Capture Principal Decision 0.1.5
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install browser harness
+        run: |
+          python3 -m pip install playwright
+          python3 -m playwright install --with-deps chromium
+      - name: Seed mature launch-ready project
+        run: |
+          python3 - <<'PY'
+          import sys
+          from pathlib import Path
+          ROOT = Path.cwd()
+          sys.path.insert(0, str(ROOT / 'scripts'))
+          from state_engine import StateStore, utc_now
+
+          store = StateStore(ROOT)
+          try:
+              pid = 'release-001'
+              oid = 'objective-release'
+              store.ensure_project(pid, 'Lattice Public Beta')
+              store.add_objective(
+                  pid,
+                  'Ship a verified public beta',
+                  'The product has completed routine delivery and is waiting only on the externally consequential production launch decision.',
+                  'product',
+                  objective_id=oid,
+              )
+              now = utc_now()
+              milestones = [
+                  ('ms-01', 'Control plane baseline complete', 1),
+                  ('ms-02', 'Concurrent execution verified', 2),
+                  ('ms-03', 'Autonomy evaluation suite green', 3),
+                  ('ms-04', 'Public beta packaging complete', 4),
+                  ('ms-05', 'Release candidate independently verified', 5),
+              ]
+              # Historical milestone state is the subject of this screenshot; all five
+              # are accepted before the production launch authority boundary is raised.
+              for mid, title, ordinal in milestones:
+                  store.conn.execute(
+                      '''INSERT INTO milestones(id, project_id, objective_id, title, ordinal, status, created_at, accepted_at)
+                         VALUES(?, ?, ?, ?, ?, 'accepted', ?, ?)''',
+                      (mid, pid, oid, title, ordinal, now, now),
+                  )
+              store.conn.commit()
+              store.raise_exception(
+                  pid,
+                  'production-launch-authorization',
+                  'Authorize production launch',
+                  'All planned delivery, verification, and packaging milestones are accepted. Publishing the release is externally consequential and remains reserved to the Principal.',
+                  'critical',
+                  'director',
+                  'director',
+                  True,
+                  'milestone',
+                  'ms-05',
+              )
+          finally:
+              store.close()
+          PY
+      - name: Serve control surface
+        run: |
+          python3 scripts/control_server.py --host 127.0.0.1 --port 8765 > /tmp/lattice-server.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8765/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/lattice-server.log
+          exit 1
+      - name: Capture corrected Principal context
+        run: |
+          mkdir -p ui-screenshots
+          python3 - <<'PY'
+          from pathlib import Path
+          from playwright.sync_api import sync_playwright
+          out = Path('ui-screenshots')
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              for filename, viewport, full_page in [
+                  ('principal-desktop-viewport.png', {'width': 1440, 'height': 1000}, False),
+                  ('principal-desktop-full.png', {'width': 1440, 'height': 1000}, True),
+                  ('principal-mobile-full.png', {'width': 390, 'height': 844}, True),
+              ]:
+                  page = browser.new_page(viewport=viewport)
+                  page.goto('http://127.0.0.1:8765', wait_until='networkidle')
+                  page.screenshot(path=str(out / filename), full_page=full_page)
+                  page.close()
+              detail = browser.new_page(viewport={'width': 1440, 'height': 1000})
+              detail.goto('http://127.0.0.1:8765/project?project=release-001', wait_until='networkidle')
+              detail.screenshot(path=str(out / 'principal-project-detail.png'), full_page=True)
+              detail.close()
+              browser.close()
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lattice-principal-decision-0.1.5
+          path: ui-screenshots/
+          if-no-files-found: error
