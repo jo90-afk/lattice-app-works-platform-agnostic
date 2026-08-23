@@ -10,6 +10,11 @@
 - Added executable greenfield delivery, verifier-disagreement, and worker-loss/recovery scenarios that drive the production claim, submission, independent verification, recovery, and Assurance boundaries and emit validated evaluation results.
 - Added semantic and acceptance fingerprints that exclude generated runtime identity, timestamps, leases, workspaces, hosts, and event ordering while retaining governed project meaning and evidence/verification outcomes.
 - Added a CI gate that runs the executable scenarios, writes their result JSON, and aggregates the resulting autonomy evidence before the full SQLite/Postgres regression suite.
+- Added an ambiguous-requirements scenario proving a Principal-only exception leaves no specialist scheduler assignment, measures blocked-information time, and records a necessary rather than unnecessary escalation.
+- Added a contradictory-information scenario proving a newly linked material contradiction reactivates and contests truth, preserves the previously accepted truth version as historical provenance, invalidates current condition satisfaction, increments its state version, and re-derives owner work without accepting the milestone.
+- Added a multi-project contention scenario proving a two-slot portfolio dispatches in recorded order, creates no durable queue, and admits the third project as capacity is released while all three progress toward independent verification.
+- Made the executable evaluation aggregate fail closed when any scenario result reports `outcome: failed`; successful process execution alone cannot make a failed evaluation pass CI.
+- Expanded the CI evidence aggregate to six executable roadmap scenarios before the full regression suite.
 
 ## 0.0.7
 
