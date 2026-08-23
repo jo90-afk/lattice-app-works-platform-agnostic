@@ -2,7 +2,7 @@
 
 Lattice treats coding agents and hosted runtimes as replaceable execution hosts. The host adapter is the boundary between those runtimes and Lattice's durable project state.
 
-The first adapter implementation is intentionally small. It does not ask a host to understand Lattice's internal tables, and it does not let a host write durable truth directly.
+The adapter is intentionally small. It does not ask a host to understand Lattice's internal tables, and it does not let a host write durable truth directly.
 
 ## Boundary
 
@@ -23,6 +23,30 @@ A host may not:
 
 The machine-readable envelope is in `runtime/host-adapter.schema.json`.
 
+## One claim path
+
+The ordinary Lattice CLI now claims through the control-plane adapter. Existing local usage still works because `--host` defaults to `local`:
+
+```bash
+python3 scripts/lattice.py claim \
+  --project first-project \
+  --role application \
+  --actor worker-1
+```
+
+A host can attach its own identity and workspace:
+
+```bash
+python3 scripts/lattice.py claim \
+  --project first-project \
+  --role application \
+  --actor worker-1 \
+  --host codex \
+  --workspace codex-worktree-42
+```
+
+Every claim first audits and clears expired leases for the project, then delegates to the existing guarded `StateStore.claim` transition, and finally records `action_claimed` with runtime metadata. There is no second claim implementation for hosts.
+
 ## Control read model
 
 The control-plane projection is read-only and stable enough for a CLI, local UI, or remote coordinator to consume. It contains, per project:
@@ -38,31 +62,56 @@ The control-plane projection is read-only and stable enough for a CLI, local UI,
 Inspect all projects:
 
 ```bash
-python3 scripts/control_plane.py inspect
+python3 scripts/lattice.py inspect
 ```
 
 Inspect one project:
 
 ```bash
-python3 scripts/control_plane.py inspect --project first-project
+python3 scripts/lattice.py inspect --project first-project
 ```
 
 Reading this projection does not mutate state.
 
-## Claim through a host
+## Local human control surface
 
-A host claim first recovers expired leases for the project, then delegates to the existing guarded `StateStore.claim` transition. The adapter records an `action_claimed` event with host/workspace metadata after the lease is created.
+The first human surface is intentionally read-only. It is a thin presentation of the same read model rather than a second application state.
 
 ```bash
-python3 scripts/control_plane.py claim \
-  --project first-project \
-  --role application \
-  --actor worker-1 \
-  --host codex \
-  --workspace codex-worktree-42
+python3 scripts/control_server.py
 ```
 
-The returned action remains the bounded execution brief produced by the active frontier. Host metadata does not enter the brief unless a later policy explicitly requires it.
+By default it binds only to `127.0.0.1:8765` and serves:
+
+- `/` — compact portfolio/project supervision view;
+- `/api/state` — the control read model as JSON;
+- `/health` — process health.
+
+The page shows the active objective and milestone, ready work, active workers, pending verification, and open exceptions. There are no mutation controls in this slice; decisions still go through guarded state transitions.
+
+## Lifecycle hooks
+
+`runtime/hooks.json` provides deterministic hook dispatch around lifecycle events. The file maps an event name to an ordered list of argv arrays. It is empty by default.
+
+Example:
+
+```json
+{
+  "action_claimed": [
+    ["python3", "integrations/on_claim.py"]
+  ]
+}
+```
+
+Each hook:
+
+- runs from the repository root;
+- receives the lifecycle event envelope as JSON on stdin;
+- runs in declaration order;
+- uses direct argv execution rather than shell interpolation;
+- must exit successfully or the lifecycle operation reports failure.
+
+Hooks may enforce or integrate around runtime events, but they do not receive direct authority to rewrite Lattice state. If a hook needs a state change, it must call a normal guarded operation.
 
 ## Lifecycle events
 
@@ -78,7 +127,7 @@ python3 scripts/control_plane.py event \
   --workspace codex-worktree-42
 ```
 
-Supported external events in this first slice are:
+Supported externally reported events are:
 
 - `workspace_created`
 - `workspace_abandoned`
@@ -93,7 +142,7 @@ The adapter itself owns `action_claimed`, `lease_expired`, and `recovery_complet
 Leases remain intentionally ephemeral and excluded from the portable snapshot. If a worker disappears while its local runtime database survives, an expired lease can be reclaimed without reconstructing intent from a conversation log.
 
 ```bash
-python3 scripts/control_plane.py recover --project first-project
+python3 scripts/lattice.py recover --project first-project
 ```
 
 Recovery:
@@ -102,7 +151,8 @@ Recovery:
 2. removes them from operational state;
 3. records one durable `lease_expired` event per lease;
 4. records `recovery_completed` for each affected project;
-5. recomputes the active frontier.
+5. dispatches configured hooks;
+6. recomputes the active frontier.
 
 The original action returns to the frontier only if the durable project state still makes it ready. If another state transition has made the action stale, it does not reappear.
 
@@ -112,12 +162,11 @@ The lease itself is not project truth. The fact that an agent attempted work, di
 
 This separation is deliberate: execution hosts can come and go without becoming a second authority over the project model.
 
-## Next implementation slice
+## Remaining 0.0.5 work
 
-This adapter is the foundation for the rest of 0.0.5. The next work should:
+The next implementation slices should:
 
-- route the main `scripts/lattice.py claim` path through the adapter so recovery is universal rather than opt-in;
 - add submit/fail/release lifecycle boundaries where they improve recovery and observability;
-- add deterministic hook dispatch around adapter events;
-- make host adapters invokable through one envelope rather than only CLI flags;
-- expose the read model through the first local human control surface.
+- make host adapters invokable through one machine envelope rather than only CLI flags;
+- expand the human surface from status visibility into an explicit Principal decision inbox;
+- package reusable expertise as host-neutral skills without moving authority out of the Agency Kernel.
