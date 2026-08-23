@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from control_plane import claim_for_host, read_model, recover_expired_leases
 from expertise import resolve_expertise
 from state_engine import LatticeError, StateStore
 
@@ -41,6 +42,13 @@ def parser() -> argparse.ArgumentParser:
 
     commands.add_parser("validate")
     commands.add_parser("status")
+
+    inspect = commands.add_parser("inspect")
+    inspect.add_argument("--project")
+    inspect.add_argument("--frontier-limit", type=int, default=5)
+
+    recover = commands.add_parser("recover")
+    recover.add_argument("--project")
 
     expertise = commands.add_parser("expertise")
     add_project(expertise)
@@ -177,6 +185,8 @@ def parser() -> argparse.ArgumentParser:
     add_project(claim)
     claim.add_argument("--role", required=True)
     claim.add_argument("--actor", required=True)
+    claim.add_argument("--host", default="local")
+    claim.add_argument("--workspace")
     claim.add_argument("--action-key")
     claim.add_argument("--ttl", type=int)
 
@@ -286,6 +296,10 @@ def main() -> int:
         with StateStore(ROOT) as store:
             if args.command == "status":
                 emit(store.status())
+            elif args.command == "inspect":
+                emit(read_model(store, args.project, args.frontier_limit))
+            elif args.command == "recover":
+                emit(recover_expired_leases(store, args.project))
             elif args.command == "project-add":
                 emit(store.ensure_project(args.project, args.name, args.status, args.max_wip, args.role))
             elif args.command == "project-status":
@@ -314,7 +328,16 @@ def main() -> int:
             elif args.command == "readiness":
                 emit(store.readiness(args.project, args.milestone))
             elif args.command == "claim":
-                emit(store.claim(args.project, args.role, args.actor, args.action_key, args.ttl))
+                emit(claim_for_host(
+                    store,
+                    project_id=args.project,
+                    role=args.role,
+                    actor=args.actor,
+                    host=args.host,
+                    workspace_id=args.workspace,
+                    action_key=args.action_key,
+                    ttl_minutes=args.ttl,
+                ))
             elif args.command == "release":
                 store.release_lease(args.lease, args.role)
                 emit({"released": args.lease})
