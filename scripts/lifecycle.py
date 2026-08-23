@@ -3,12 +3,17 @@
 
 from __future__ import annotations
 
+import argparse
+import json
+import sys
+from pathlib import Path
 from typing import Any, Callable
 
 from hooks import dispatch_hooks
 from state_engine import LatticeError, StateStore
 
 
+ROOT = Path(__file__).resolve().parents[1]
 ACTION_EVENTS = {
     "action_released",
     "action_submitted",
@@ -237,3 +242,64 @@ def resolve_exception_action(
         entity_id=lambda result, _: str(result["id"]),
         payload=lambda _result, _: {"resolution": resolution},
     )
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(description="Complete a leased Lattice action with lifecycle telemetry.")
+    commands = result.add_subparsers(dest="command", required=True)
+
+    def leased(name: str) -> argparse.ArgumentParser:
+        command = commands.add_parser(name)
+        command.add_argument("--lease", required=True)
+        command.add_argument("--role", required=True)
+        return command
+
+    leased("release")
+    submit = leased("submit")
+    submit.add_argument("--summary", required=True)
+    submit.add_argument("--artifact", action="append", default=[])
+    submit.add_argument("--evidence-ref")
+    fail = leased("fail")
+    fail.add_argument("--summary", required=True)
+    review = leased("review")
+    review.add_argument("--verdict", required=True, choices=("SATISFIED", "NOT_SATISFIED", "CONCUR", "BLOCK"))
+    review.add_argument("--summary", required=True)
+    review.add_argument("--evidence-ref")
+    advance = leased("advance")
+    advance.add_argument("--summary", required=True)
+    fulfill = leased("commitment-fulfill")
+    fulfill.add_argument("--summary", required=True)
+    resolve = leased("exception-resolve")
+    resolve.add_argument("--resolution", required=True)
+    return result
+
+
+def main() -> int:
+    args = parser().parse_args()
+    try:
+        with StateStore(ROOT) as store:
+            if args.command == "release":
+                value = release_action(store, args.lease, args.role)
+            elif args.command == "submit":
+                value = submit_action(store, args.lease, args.role, args.summary, args.artifact, args.evidence_ref)
+            elif args.command == "fail":
+                value = fail_action(store, args.lease, args.role, args.summary)
+            elif args.command == "review":
+                value = review_action(store, args.lease, args.role, args.verdict, args.summary, args.evidence_ref)
+            elif args.command == "advance":
+                value = advance_action(store, args.lease, args.role, args.summary)
+            elif args.command == "commitment-fulfill":
+                value = fulfill_commitment_action(store, args.lease, args.role, args.summary)
+            elif args.command == "exception-resolve":
+                value = resolve_exception_action(store, args.lease, args.role, args.resolution)
+            else:
+                raise LatticeError("Unsupported lifecycle command: " + str(args.command))
+    except (LatticeError, KeyError, ValueError) as error:
+        print("Lattice rejected the operation: " + str(error), file=sys.stderr)
+        return 2
+    print(json.dumps(value, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
