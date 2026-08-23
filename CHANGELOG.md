@@ -10,6 +10,9 @@
 - Kept operational lifecycle telemetry from advancing semantic project revisions, so host events do not stale valid hosted deltas.
 - Added explicit event sequencing alongside semantic revision reporting in the control read model.
 - Compensate failed post-claim hooks by releasing the lease and recording `hook_failed` plus `claim_aborted`, so no failed claim remains hidden in flight.
+- Added post-transition lifecycle telemetry for release, submission, failure, verification, milestone acceptance, commitment fulfillment, and exception resolution.
+- Made completion-hook failures auditable without rolling back already committed guarded state transitions.
+- Added a Principal decision inbox derived only from `principal_only` exceptions and Principal-owned commitments.
 - Added the first dependency-free local control surface and `/api/state` projection.
 - Removed legacy process-backlog artifacts and restored a clean neutral seed contract.
 - Added release-version consistency checks so future PRs cannot land with stale README or seed metadata.

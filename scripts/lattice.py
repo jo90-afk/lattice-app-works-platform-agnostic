@@ -13,7 +13,17 @@ from typing import Any
 
 from control_plane import claim_for_host, read_model, recover_expired_leases
 from expertise import resolve_expertise
+from lifecycle import (
+    advance_action,
+    fail_action,
+    fulfill_commitment_action,
+    release_action,
+    resolve_exception_action,
+    review_action,
+    submit_action,
+)
 from state_engine import LatticeError, StateStore
+from supervision import principal_inbox
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,6 +56,9 @@ def parser() -> argparse.ArgumentParser:
     inspect = commands.add_parser("inspect")
     inspect.add_argument("--project")
     inspect.add_argument("--frontier-limit", type=int, default=5)
+
+    principal = commands.add_parser("principal-inbox")
+    principal.add_argument("--project")
 
     recover = commands.add_parser("recover")
     recover.add_argument("--project")
@@ -281,6 +294,7 @@ def main() -> int:
         with StateStore(ROOT) as store:
             if args.command == "status": emit(store.status())
             elif args.command == "inspect": emit(read_model(store, args.project, args.frontier_limit))
+            elif args.command == "principal-inbox": emit(principal_inbox(store, args.project))
             elif args.command == "recover": emit(recover_expired_leases(store, args.project))
             elif args.command == "project-add": emit(store.ensure_project(args.project, args.name, args.status, args.max_wip, args.role))
             elif args.command == "project-status": emit(store.set_project_status(args.project, args.status, args.role))
@@ -296,15 +310,15 @@ def main() -> int:
             elif args.command == "frontier": emit(store.frontier(args.project, args.role, args.limit))
             elif args.command == "readiness": emit(store.readiness(args.project, args.milestone))
             elif args.command == "claim": emit(claim_for_host(store, project_id=args.project, role=args.role, actor=args.actor, host=args.host, workspace_id=args.workspace, action_key=args.action_key, ttl_minutes=args.ttl))
-            elif args.command == "release": store.release_lease(args.lease, args.role); emit({"released": args.lease})
-            elif args.command == "submit": emit(store.submit(args.lease, args.role, args.summary, args.artifact, args.evidence_ref))
-            elif args.command == "fail": emit(store.fail_action(args.lease, args.role, args.summary))
-            elif args.command == "review": emit(store.review(args.lease, args.role, args.verdict, args.summary, args.evidence_ref))
-            elif args.command == "advance": emit(store.advance_milestone(args.lease, args.role, args.summary))
+            elif args.command == "release": emit(release_action(store, args.lease, args.role))
+            elif args.command == "submit": emit(submit_action(store, args.lease, args.role, args.summary, args.artifact, args.evidence_ref))
+            elif args.command == "fail": emit(fail_action(store, args.lease, args.role, args.summary))
+            elif args.command == "review": emit(review_action(store, args.lease, args.role, args.verdict, args.summary, args.evidence_ref))
+            elif args.command == "advance": emit(advance_action(store, args.lease, args.role, args.summary))
             elif args.command == "commitment-add": emit(store.add_commitment(args.project, args.title, args.detail, args.owner_role, args.role, args.priority, args.due_at, args.blocking, args.id))
-            elif args.command == "commitment-fulfill": emit(store.fulfill_commitment(args.lease, args.role, args.summary))
+            elif args.command == "commitment-fulfill": emit(fulfill_commitment_action(store, args.lease, args.role, args.summary))
             elif args.command == "exception-raise": emit(store.raise_exception(args.project, args.dedupe_key, args.title, args.detail, args.severity, args.owner_role, args.role, args.principal_only, args.target_type, args.target_id))
-            elif args.command == "exception-resolve": emit(store.resolve_exception(args.lease, args.role, args.resolution))
+            elif args.command == "exception-resolve": emit(resolve_exception_action(store, args.lease, args.role, args.resolution))
             elif args.command == "state-export": emit(store.export_snapshot(Path(args.output).resolve() if args.output else None))
             elif args.command == "state-import": store.import_snapshot(Path(args.file).resolve(), args.expected_revision); emit(store.status())
             elif args.command == "apply-delta": emit(store.apply_delta(json.loads(Path(args.file).read_text(encoding="utf-8"))))
