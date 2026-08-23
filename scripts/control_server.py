@@ -258,7 +258,7 @@ def render_html(model: dict, flash: str | None = None, flash_error: bool = False
 
 
 class ControlHandler(BaseHTTPRequestHandler):
-    server_version = "LatticeControl/0.1.3"
+    server_version = "LatticeControl/0.1.4"
 
     def _model(self) -> dict:
         query = parse_qs(urlparse(self.path).query)

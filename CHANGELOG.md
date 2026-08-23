@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4
+
+- Active portfolio rendering now excludes inactive/seed/history projects so the project cards agree with the active-project summary and navigation counts.
+
 ## 0.1.3
 
 - Rebuilt the human surface as a warm portfolio dashboard modeled on the public Lattice site rather than an operations console.
