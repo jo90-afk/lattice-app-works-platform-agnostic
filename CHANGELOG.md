@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0
+
+- Started the public-beta release on the sanitized 0.0.8 control-plane baseline.
+- Added a dependency-free, non-destructive `doctor` preflight with human and machine-readable output for Python support, repository layout, release metadata, canonical repository/state validation, local writeability, and configured backend readiness.
+- Made Postgres preflight explicit only when `LATTICE_DATABASE_URL` is configured; SQLite remains the zero-dependency local default.
+- Added one documented bootstrap path from sanitized clone through initialization, mandate confirmation, objective/readiness encoding, frontier claim, evidence submission, independent verification, Assurance acceptance, inspection, and recovery.
+- Aligned public release metadata across `VERSION`, README, seed manifest, changelog, and the control-surface release identifier without changing `agency_version`, state schema, adapter protocol, or read-model version.
+
 ## 0.0.8
 
 - Added a versioned evaluation scenario registry covering every 0.0.8 roadmap scenario class: greenfield delivery, cross-component refactoring, migration, CI remediation, ambiguous requirements, contradictory information, worker loss, verifier disagreement, concurrent artifact conflict, and multi-project contention.
