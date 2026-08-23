@@ -44,6 +44,9 @@ jobs:
           python3 scripts/evaluation_adversarial_scenarios.py ambiguous-requirements-escalation --host ci --run-id ci-ambiguous > /tmp/lattice-evals/ambiguous.json
           python3 scripts/evaluation_adversarial_scenarios.py contradictory-new-information --host ci --run-id ci-contradiction > /tmp/lattice-evals/contradiction.json
           python3 scripts/evaluation_adversarial_scenarios.py multi-project-capacity-contention --host ci --run-id ci-portfolio > /tmp/lattice-evals/portfolio.json
+          python3 scripts/evaluation_delivery_scenarios.py cross-component-refactor --host ci --run-id ci-refactor > /tmp/lattice-evals/refactor.json
+          python3 scripts/evaluation_delivery_scenarios.py migration-work --host ci --run-id ci-migration > /tmp/lattice-evals/migration.json
+          python3 scripts/evaluation_delivery_scenarios.py ci-remediation --host ci --run-id ci-remediation > /tmp/lattice-evals/ci-remediation.json
           python3 scripts/evaluation_gate.py /tmp/lattice-evals/*.json
       - name: Install optional Postgres test driver
         run: python3 -m pip install "psycopg[binary]>=3.2,<4"
