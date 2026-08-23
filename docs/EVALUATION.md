@@ -82,7 +82,7 @@ The Director records a real `principal_only` exception before any specialist con
 
 ### Contradictory new information
 
-A condition is first satisfied through a normal owner submission and independent Quality verdict under an accepted truth. That truth is then treated as settled/background. A second material truth is added and linked with the production `contradicts` relation. The scenario passes only when Lattice reactivates and contests both propositions, clears the accepted truth version from the dependent condition, increments the condition state version, makes the condition no longer satisfied, keeps the milestone unaccepted, and derives new owner work. A coherent invalidation records zero state-divergence incidents; failure to invalidate records divergence.
+A condition is first satisfied through a normal owner submission and independent Quality verdict under an accepted truth. That truth is then treated as settled/background. A second material truth is added and linked with the production `contradicts` relation. The scenario passes only when Lattice reactivates and contests both propositions, increments the dependent condition's state version, changes the condition from satisfied to unknown, keeps the milestone unaccepted, and derives new owner work. The previously accepted truth version remains recorded on the condition as historical provenance: it identifies the evidence state under which the earlier review was accepted, but no longer makes the current condition satisfied. A coherent invalidation records zero state-divergence incidents; failure to invalidate records divergence.
 
 ### Multi-project capacity contention
 
@@ -90,7 +90,7 @@ Three active projects compete for three available Application workers under a te
 
 The evaluation registry used here is an evaluation input, not a replacement for the repository portfolio registry.
 
-CI executes all six implemented scenarios as command-line runs, writes their result JSON, and feeds the aggregate back through `scripts/evaluation.py summarize` before the ordinary SQLite/Postgres regression suite runs.
+CI executes all six implemented scenarios as command-line runs, writes their result JSON, and feeds the aggregate through `scripts/evaluation_gate.py`. The gate fails if any result reports `outcome: failed`; passing shell execution alone is insufficient. Only after the evidence gate passes does CI continue through the ordinary SQLite/Postgres regression suite.
 
 ## Semantic fingerprints
 
