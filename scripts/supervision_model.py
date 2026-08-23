@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from control_plane import read_model
+from project_graph import consequence_graph
 from scheduler import parse_registry
 from state_engine import StateStore
 from supervision import principal_inbox
@@ -58,7 +59,8 @@ def _portfolio_order(root: Path, project_ids: list[str]) -> list[str]:
     registered, _capacity = parse_registry(registry)
     known = set(project_ids)
     ordered = [project_id for project_id in registered if project_id in known]
-    ordered.extend(project_id for project_id in project_ids if project_id not in set(ordered))
+    seen = set(ordered)
+    ordered.extend(project_id for project_id in project_ids if project_id not in seen)
     return ordered
 
 
@@ -136,6 +138,9 @@ def supervision_model(
         by_id = {item["project"]["id"]: item for item in projects}
         ordered_ids = _portfolio_order(store.root, list(by_id))
         projects = [by_id[project] for project in ordered_ids]
+
+    for item in projects:
+        item["consequence_graph"] = consequence_graph(store, item["project"]["id"])
 
     active_projects = sum(1 for item in projects if item["project"]["status"] == "active")
     in_flight = sum(len(item["active_leases"]) for item in projects)
