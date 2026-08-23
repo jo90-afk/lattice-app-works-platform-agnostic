@@ -49,15 +49,14 @@ class StateBackendTest(unittest.TestCase):
         finally:
             conn.close()
 
-    def test_postgres_backend_uses_stable_project_advisory_lock(self) -> None:
+    def test_postgres_backend_uses_current_transaction_and_stable_project_lock(self) -> None:
         connection = RecordingConnection()
         backend = PostgresStateBackend(connection)
         backend.begin_project_write("project-001")
         calls = connection.cursor_value.calls
-        self.assertEqual(calls[0], ("BEGIN", None))
         self.assertEqual(
-            calls[1],
-            ("SELECT pg_advisory_xact_lock(%s)", (project_lock_key("project-001"),)),
+            calls,
+            [("SELECT pg_advisory_xact_lock(%s)", (project_lock_key("project-001"),))],
         )
         self.assertEqual(project_lock_key("project-001"), project_lock_key("project-001"))
         self.assertNotEqual(project_lock_key("project-001"), project_lock_key("project-002"))
