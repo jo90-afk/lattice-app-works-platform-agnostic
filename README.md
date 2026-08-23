@@ -17,6 +17,12 @@ The repository is a sanitized seed. It contains no real person's data or project
 
 The runtime uses only Python's standard library and SQLite.
 
+## Roadmap
+
+The public roadmap treats agent runtimes as replaceable execution hosts and focuses Lattice on the durable control plane above them: project truth, authority, frontier derivation, verification, recovery, and human exception handling.
+
+See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
 ## Select expertise and platforms
 
 Every role has a researched core expertise module. Application delivery is no longer an Android-only role: the platform list is an open set in `projects/<project-id>/project/capabilities.json`. Common Android, Apple, web, Windows, Linux, CLI, and cross-platform packs ship with the seed; an unknown platform remains valid and triggers focused first-party research rather than loading the whole library.
