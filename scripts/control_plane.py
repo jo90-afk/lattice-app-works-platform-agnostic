@@ -161,7 +161,13 @@ def recover_expired_leases(store: StateStore, project_id: str | None = None) -> 
         ).fetchall()
     ]
     if not expired:
-        return {"recovered": 0, "leases": [], "frontiers": {}, "hook_results": [], "abandoned_workspaces": []}
+        return {
+            "recovered": 0,
+            "leases": [],
+            "frontiers": {},
+            "hook_results": [],
+            "abandoned_workspaces": [],
+        }
 
     by_project: dict[str, list[dict[str, Any]]] = defaultdict(list)
     abandoned_by_project: dict[str, list[str]] = defaultdict(list)
@@ -193,7 +199,9 @@ def recover_expired_leases(store: StateStore, project_id: str | None = None) -> 
                     "runtime",
                     workspace_payload,
                 )
-                workspace_event_id = int(store.conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+                workspace_event_id = int(
+                    store.conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+                )
                 abandoned_by_project[project].append(str(workspace_id))
                 envelopes.append(
                     {
@@ -429,6 +437,33 @@ def _project_read_model(
             (project_id,),
         ).fetchall()
     ]
+    readiness = store.readiness(project_id)
+    evidence_chain = [
+        dict(row)
+        for row in store.conn.execute(
+            """SELECT e.id, e.entity_type, e.entity_id, e.role, e.summary,
+                      e.source_ref, e.content_hash, e.created_at,
+                      COALESCE(sc.id, rc.id) AS condition_id,
+                      COALESCE(sc.key, rc.key) AS condition_key,
+                      COALESCE(sc.title, rc.title) AS condition_title,
+                      COALESCE(sc.status, rc.status) AS condition_status,
+                      s.id AS submission_id,
+                      r.id AS review_id,
+                      r.verdict AS review_verdict
+               FROM evidence e
+               LEFT JOIN submissions s
+                 ON e.entity_type = 'submission' AND s.id = e.entity_id
+               LEFT JOIN conditions sc ON sc.id = s.condition_id
+               LEFT JOIN reviews r
+                 ON e.entity_type = 'review' AND r.id = e.entity_id
+               LEFT JOIN submissions rs ON rs.id = r.submission_id
+               LEFT JOIN conditions rc ON rc.id = rs.condition_id
+               WHERE e.project_id = ?
+               ORDER BY e.created_at DESC, e.id DESC
+               LIMIT 20""",
+            (project_id,),
+        ).fetchall()
+    ]
     events = []
     for row in store.conn.execute(
         """SELECT id, revision, event_type, entity_type, entity_id, role,
@@ -445,11 +480,13 @@ def _project_read_model(
         "semantic_revision": store.project_revision(project_id),
         "objective": dict(objective) if objective else None,
         "milestone": dict(milestone) if milestone else None,
+        "readiness": readiness,
         "frontier": store.frontier(project_id, limit=frontier_limit),
         "active_leases": leases,
         "pending_verification": pending_verification,
         "open_exceptions": exceptions,
         "frontier_truths": truths,
+        "evidence_chain": evidence_chain,
         "recent_events": events,
     }
 
