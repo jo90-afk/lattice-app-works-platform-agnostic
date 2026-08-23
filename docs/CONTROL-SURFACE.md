@@ -1,6 +1,6 @@
 # Local Control Surface and Hooks
 
-The 0.0.5 runtime integration puts ordinary claims through the host-neutral control-plane boundary and exposes the same read model to a local human supervisor.
+The control surface exposes canonical Lattice state to a human supervisor without creating a second writable control path. The 0.0.7 surface uses the same configured operational backend as workers, including Postgres when `LATTICE_DATABASE_URL` is set.
 
 ## Unified claim path
 
@@ -15,13 +15,13 @@ python3 scripts/lattice.py claim \
   --workspace worktree-42
 ```
 
-Before the claim is made, expired leases for the project are recovered and audited. The claim remains subject to the existing frontier, role, and WIP guards.
+Before the claim is made, expired leases for the project are recovered and audited. The claim remains subject to the existing frontier, role, WIP, and shared-state concurrency guards.
 
-Use `python3 scripts/lattice.py inspect` for the read-only control projection and `python3 scripts/lattice.py recover --project <id>` for explicit recovery.
+Use `python3 scripts/lattice.py inspect` for the host-neutral read projection and `python3 scripts/lattice.py recover --project <id>` for explicit recovery.
 
 ## Complete action lifecycle
 
-Claim is only the start of the runtime boundary. Completed leased actions now have a host-neutral lifecycle wrapper in `scripts/lifecycle.py` for release, submission, failure, verification, milestone acceptance, commitment fulfillment, and exception resolution.
+Completed leased actions have a host-neutral lifecycle wrapper in `scripts/lifecycle.py` for release, submission, failure, verification, milestone acceptance, commitment fulfillment, and exception resolution.
 
 For example:
 
@@ -47,11 +47,27 @@ Operational event types include:
 
 ## Semantic revision and event sequence
 
-Hosted deltas are guarded by the project's semantic revision: the last revision that changed project truth, readiness, commitments, exceptions, or another governed project-state entity. Operational lifecycle telemetry does not advance that revision.
+Hosted deltas are guarded by the project's semantic revision: the last revision that changed governed project state. Operational lifecycle telemetry does not advance that revision.
 
 The control read model exposes a separate `event_sequence` based on durable event IDs. This lets hosts and the human control surface observe claims, workspaces, timeouts, recovery, and hook failures without making those observations invalidate otherwise-current hosted work.
 
 A lifecycle event therefore carries both an `event_id` and the semantic revision at which it occurred. `state_revision` and hosted `base_revision` continue to mean semantic project state, not telemetry sequence.
+
+## 0.0.7 supervision projection
+
+`scripts/supervision_model.py` composes the existing control-plane read model with human-supervision context. It is a projection only; it does not persist new portfolio or project entities.
+
+The projection adds:
+
+- configured state backend identity;
+- portfolio-order project presentation;
+- counts for active projects, ready actions, in-flight leases, pending verification, exceptions, and Principal decisions;
+- the existing Principal-only decision inbox;
+- recent accepted semantic changes across the selected portfolio or project;
+- operational counts for claims, completions, recovery, lease expiry, worker failure, hook failure, and claim aborts;
+- observed host identities from lifecycle telemetry.
+
+The existing project projection remains intact underneath it: objective, milestone, semantic revision, readiness, frontier, active leases, pending verification, exceptions, frontier truths, evidence chain, and recent events.
 
 ## Local control surface
 
@@ -63,11 +79,11 @@ python3 scripts/control_server.py
 
 It binds to `127.0.0.1:8765` by default and serves:
 
-- `/` — human portfolio/project status and the Principal decision inbox;
-- `/api/state` — the read model plus the Principal decision projection as JSON;
+- `/` — human portfolio/project supervision and the Principal decision inbox;
+- `/api/state` — the complete read-only supervision projection as JSON;
 - `/health` — process health.
 
-The surface remains intentionally read-only. It shows active objective and milestone, ready work, active workers, pending verification, open exceptions, and a Principal inbox derived only from durable state that actually requires human authority.
+The server opens state through `scripts/store_factory.py`. Local installations therefore read SQLite by default; shared installations with `LATTICE_DATABASE_URL` read the same authoritative Postgres state used by remote workers. The UI may not silently fall back to a different store.
 
 The Principal inbox is not a task list. It contains only:
 
@@ -99,4 +115,4 @@ Hooks do not receive a separate state mutation API. Any project-state change mus
 
 ## Validation
 
-This integration is validated against the repository's active seed contract, including capsule/state agreement, machine-readable capabilities, release-version consistency, lifecycle regression coverage, Principal-inbox derivation, and the absence of legacy process-backlog artifacts.
+The surface is validated against the same repository contract and Postgres-backed concurrency suite as the runtime. Rendering tests also require it to remain read-only: there are no mutation forms or hidden UI write paths.
