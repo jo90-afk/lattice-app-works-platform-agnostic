@@ -37,11 +37,12 @@ SNAPSHOT_ORDER = {
 
 
 class PostgresStateStore(StateStore):
-    """Run the same guarded StateStore semantics on a supplied Postgres connection.
+    """Run the guarded StateStore semantics on a supplied Postgres connection.
 
-    The caller owns driver selection. `connection` is a DB-API-style Postgres
-    connection (for example a psycopg connection). The local SQLite runtime
-    remains the dependency-free default.
+    Postgres is the operational authority after bootstrap. A repository snapshot is
+    imported automatically only into an empty operational store. Implicit exports
+    return an in-memory portable projection; callers must supply a destination to
+    publish a checkpoint file.
     """
 
     state_backend_name = "postgres"
@@ -63,27 +64,15 @@ class PostgresStateStore(StateStore):
         self.conn.commit()
         self._ensure_meta()
 
-        if self.snapshot_path.is_file():
+        project_count = int(self.conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0])
+        if project_count == 0 and self.revision == 0 and self.snapshot_path.is_file():
             snapshot_raw = self.snapshot_path.read_text(encoding="utf-8")
             snapshot_hash = hashlib.sha256(snapshot_raw.encode("utf-8")).hexdigest()
-            stored_hash_row = self.conn.execute(
-                "SELECT value FROM meta WHERE key = 'snapshot_hash'"
-            ).fetchone()
-            stored_hash = stored_hash_row[0] if stored_hash_row else ""
-            if stored_hash != snapshot_hash:
-                active_leases = self.conn.execute(
-                    "SELECT COUNT(*) FROM leases WHERE expires_at > ?", (utc_now(),)
-                ).fetchone()[0]
-                if active_leases:
-                    raise LatticeError(
-                        "The repository snapshot changed while shared action leases are active; "
-                        "finish or release them before switching state revisions."
-                    )
-                self._load_snapshot(json.loads(snapshot_raw))
-                with self.conn:
-                    self.conn.execute(
-                        "UPDATE meta SET value = ? WHERE key = 'snapshot_hash'", (snapshot_hash,)
-                    )
+            self._load_snapshot(json.loads(snapshot_raw))
+            with self.conn:
+                self.conn.execute(
+                    "UPDATE meta SET value = ? WHERE key = 'snapshot_hash'", (snapshot_hash,)
+                )
 
     def _load_snapshot(self, snapshot: dict[str, Any]) -> None:
         super()._load_snapshot(snapshot)
@@ -98,15 +87,13 @@ class PostgresStateStore(StateStore):
                    ) FROM events"""
             )
 
-    def export_snapshot(self, destination: Path | None = None) -> dict[str, Any]:
-        target = destination or self.snapshot_path
-        target.parent.mkdir(parents=True, exist_ok=True)
+    def _snapshot_payload(self) -> dict[str, Any]:
         tables: dict[str, list[dict[str, Any]]] = {}
         for table in SNAPSHOT_TABLES:
             order = SNAPSHOT_ORDER[table]
             rows = self.conn.execute("SELECT * FROM " + table + " ORDER BY " + order).fetchall()
             tables[table] = [dict(row) for row in rows]
-        payload = {
+        return {
             "format": "lattice-state-snapshot",
             "schema_version": self.policy["schema_version"],
             "agency_version": self.policy["agency_version"],
@@ -115,14 +102,36 @@ class PostgresStateStore(StateStore):
             "ephemeral_state_excluded": ["leases"],
             "tables": tables,
         }
+
+    def export_snapshot(self, destination: Path | None = None) -> dict[str, Any]:
+        payload = self._snapshot_payload()
+        if destination is None:
+            return payload
+
+        target = destination.resolve()
+        target.parent.mkdir(parents=True, exist_ok=True)
         temporary = target.with_suffix(target.suffix + ".tmp")
         serialized = json.dumps(payload, indent=2, sort_keys=True) + "\n"
         temporary.write_text(serialized, encoding="utf-8")
         temporary.replace(target)
-        if target.resolve() == self.snapshot_path.resolve():
+        if target == self.snapshot_path.resolve():
             snapshot_hash = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
             with self.conn:
                 self.conn.execute(
                     "UPDATE meta SET value = ? WHERE key = 'snapshot_hash'", (snapshot_hash,)
                 )
         return payload
+
+    def import_snapshot(self, source: Path, expected_revision: int | None = None) -> None:
+        """Explicit import remains available but is never performed implicitly on a live store."""
+        if expected_revision is not None and self.revision != expected_revision:
+            raise LatticeError(
+                f"State revision changed: expected {expected_revision}, current {self.revision}"
+            )
+        snapshot = json.loads(source.read_text(encoding="utf-8"))
+        active_leases = int(
+            self.conn.execute("SELECT COUNT(*) FROM leases WHERE expires_at > ?", (utc_now(),)).fetchone()[0]
+        )
+        if active_leases:
+            raise LatticeError("Cannot import a shared-state checkpoint while action leases are active")
+        self._load_snapshot(snapshot)
