@@ -1,4 +1,4 @@
-# Lattice App Works 0.1.4
+# Lattice App Works 0.1.5
 
 Lattice is a platform-agnostic, multi-project AI software agency built around an active frontier rather than a task backlog. It stores durable project state, truth, evidence, commitments, and exceptions; it derives the next few executable actions only when an agent asks for them.
 

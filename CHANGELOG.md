@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.5
+
+- Preserve milestone context after Assurance acceptance so Principal launch decisions remain attached to the exact accepted release milestone.
+- Expose complete milestone history in the project read model and detail screen.
+- Use the latest accepted milestone as the portfolio card context when a project has no active milestone.
+
 ## 0.1.4
 
 - Active portfolio rendering now excludes inactive/seed/history projects so the project cards agree with the active-project summary and navigation counts.

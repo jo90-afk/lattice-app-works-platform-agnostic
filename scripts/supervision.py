@@ -30,10 +30,17 @@ def _project_context(store: StateStore, project_id: str) -> dict[str, Any]:
         "SELECT * FROM milestones WHERE project_id = ? AND status = 'active'",
         (project_id,),
     ).fetchone()
+    latest_accepted = store.conn.execute(
+        """SELECT * FROM milestones
+           WHERE project_id = ? AND status = 'accepted'
+           ORDER BY ordinal DESC, accepted_at DESC, created_at DESC LIMIT 1""",
+        (project_id,),
+    ).fetchone()
     return {
         "project": project,
         "active_objective": dict(objective) if objective else None,
         "active_milestone": dict(milestone) if milestone else None,
+        "latest_accepted_milestone": dict(latest_accepted) if latest_accepted else None,
         "semantic_revision": store.project_revision(project_id),
     }
 

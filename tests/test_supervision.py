@@ -104,6 +104,30 @@ class SupervisionTest(unittest.TestCase):
             {"fulfill", "leave_open"},
         )
 
+    def test_principal_launch_decision_keeps_accepted_milestone_context(self) -> None:
+        self.store.conn.execute(
+            "UPDATE milestones SET status = 'accepted', accepted_at = ? WHERE id = ?",
+            ("2026-08-23T20:00:00Z", "milestone-001"),
+        )
+        self.store.raise_exception(
+            "project-001",
+            "production-launch-after-acceptance",
+            "Authorize production launch",
+            "All routine delivery gates are complete; production distribution requires Principal authorization.",
+            "critical",
+            "director",
+            "director",
+            True,
+            "milestone",
+            "milestone-001",
+        )
+        inbox = principal_inbox(self.store, "project-001")
+        item = next(i for i in inbox["items"] if i["title"] == "Authorize production launch")
+        self.assertIsNone(item["affected_state"]["active_milestone"])
+        self.assertEqual(item["affected_state"]["latest_accepted_milestone"]["id"], "milestone-001")
+        self.assertEqual(item["affected_state"]["target"]["state"]["status"], "accepted")
+
+
 
 if __name__ == "__main__":
     unittest.main()
