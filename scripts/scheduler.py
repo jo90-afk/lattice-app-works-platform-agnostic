@@ -68,7 +68,8 @@ def portfolio_order(store: StateStore, registry_path: Path) -> tuple[list[str], 
     ]
     active_set = set(active)
     ordered = [project_id for project_id in registered if project_id in active_set]
-    ordered.extend(project_id for project_id in active if project_id not in set(ordered))
+    seen = set(ordered)
+    ordered.extend(project_id for project_id in active if project_id not in seen)
     return ordered, capacity
 
 
@@ -97,6 +98,28 @@ def _available_workers(store: StateStore, workers: Iterable[Worker]) -> list[Wor
     return result
 
 
+def _project_slots(store: StateStore, project_id: str) -> int:
+    now = utc_now()
+    project = store._require_project(project_id)
+    active = int(
+        store.conn.execute(
+            "SELECT COUNT(*) FROM leases WHERE project_id = ? AND expires_at > ?",
+            (project_id, now),
+        ).fetchone()[0]
+    )
+    return max(0, int(project["max_wip"]) - active)
+
+
+def _active_project_roles(store: StateStore, project_id: str) -> set[str]:
+    return {
+        str(row["role"])
+        for row in store.conn.execute(
+            "SELECT DISTINCT role FROM leases WHERE project_id = ? AND expires_at > ?",
+            (project_id, utc_now()),
+        ).fetchall()
+    }
+
+
 def candidate_plan(
     store: StateStore,
     workers: Iterable[Worker],
@@ -115,10 +138,13 @@ def candidate_plan(
     available = _available_workers(store, workers)
     assignments: list[dict[str, Any]] = []
     used_workers: set[str] = set()
+    project_slots = {project_id: _project_slots(store, project_id) for project_id in projects}
+    project_planned = {project_id: 0 for project_id in projects}
+    unavailable_roles = {project_id: _active_project_roles(store, project_id) for project_id in projects}
 
     # Portfolio order is the primary sort. Frontier score already captures
-    # readiness/risk/priority inside a project. One pass gives each project an
-    # opportunity before another project consumes additional portfolio slots.
+    # readiness/risk/priority inside a project. Repeated passes give each project
+    # one opportunity before a higher-ranked project consumes another slot.
     project_actions = {
         project_id: store.frontier(project_id, None, 1000)
         for project_id in projects
@@ -128,11 +154,14 @@ def candidate_plan(
         for project_id in projects:
             if len(assignments) >= capacity:
                 break
+            if project_planned[project_id] >= project_slots[project_id]:
+                continue
             actions = project_actions[project_id]
             action = next(
                 (
                     item for item in actions
                     if item["role"] != "principal"
+                    and item["role"] not in unavailable_roles[project_id]
                     and not any(existing["action"]["action_key"] == item["action_key"] for existing in assignments)
                     and any(
                         worker.actor not in used_workers and worker.role == item["role"]
@@ -165,6 +194,8 @@ def candidate_plan(
                 }
             )
             used_workers.add(worker.actor)
+            project_planned[project_id] += 1
+            unavailable_roles[project_id].add(action["role"])
             made_assignment = True
         if not made_assignment:
             break
@@ -176,10 +207,9 @@ def candidate_plan(
         "active_specialist_leases": active,
         "available_slots": capacity,
         "project_order": projects,
+        "project_slots": project_slots,
         "assignments": assignments,
-        "unassigned_workers": [
-            worker.actor for worker in available if worker.actor not in used_workers
-        ],
+        "unassigned_workers": [worker.actor for worker in available if worker.actor not in used_workers],
     }
 
 
@@ -249,12 +279,7 @@ def main() -> int:
         workers = _load_workers(args.workers)
         with open_state_store(ROOT) as store:
             if args.command == "plan":
-                result = candidate_plan(
-                    store,
-                    workers,
-                    registry_path=Path(args.registry),
-                    limit=args.limit,
-                )
+                result = candidate_plan(store, workers, registry_path=Path(args.registry), limit=args.limit)
             else:
                 result = dispatch(
                     store,
