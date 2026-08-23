@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.7
+
+- Started the human supervision release on the same canonical read model and state authority used by the runtime.
+- Made the local control surface open the configured operational backend instead of always reading local SQLite, so shared Postgres deployments and human supervision cannot silently diverge.
+- Added a supervision projection with portfolio summary, Principal-only decision count, recent accepted changes, backend identity, and operational telemetry without creating a second writable state model.
+- Expanded the read-only browser surface to show portfolio-level activity, semantic/event revision identity, frontier truths, evidence, verification, exceptions, and runtime health signals.
+
 ## 0.0.6
 
 - Made hosted action claims acquire SQLite's writer lock before frontier and WIP checks so lease acquisition is serialized at the durable control boundary.
