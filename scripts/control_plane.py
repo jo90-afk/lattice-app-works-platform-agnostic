@@ -51,6 +51,26 @@ def _event_sequence(store: StateStore) -> int:
     return int(row[0])
 
 
+def _claim_runtime_context(store: StateStore, lease_id: str) -> dict[str, Any]:
+    row = store.conn.execute(
+        """SELECT payload_json FROM events
+           WHERE event_type = 'action_claimed' AND entity_type = 'lease' AND entity_id = ?
+           ORDER BY id DESC LIMIT 1""",
+        (lease_id,),
+    ).fetchone()
+    return _decode(row["payload_json"], {}) if row else {}
+
+
+def _workspace_already_abandoned(store: StateStore, project_id: str, workspace_id: str) -> bool:
+    return store.conn.execute(
+        """SELECT 1 FROM events
+           WHERE project_id = ? AND event_type = 'workspace_abandoned'
+             AND entity_type = 'workspace' AND entity_id = ?
+           LIMIT 1""",
+        (project_id, workspace_id),
+    ).fetchone() is not None
+
+
 def record_lifecycle_event(
     store: StateStore,
     *,
@@ -141,15 +161,54 @@ def recover_expired_leases(store: StateStore, project_id: str | None = None) -> 
         ).fetchall()
     ]
     if not expired:
-        return {"recovered": 0, "leases": [], "frontiers": {}, "hook_results": []}
+        return {"recovered": 0, "leases": [], "frontiers": {}, "hook_results": [], "abandoned_workspaces": []}
 
     by_project: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    abandoned_by_project: dict[str, list[str]] = defaultdict(list)
     envelopes: list[dict[str, Any]] = []
     with store.conn:
         for lease in expired:
-            by_project[lease["project_id"]].append(lease)
+            project = lease["project_id"]
+            by_project[project].append(lease)
+            runtime_context = _claim_runtime_context(store, lease["id"])
+            workspace_id = runtime_context.get("workspace_id")
+            host = runtime_context.get("host")
+            semantic_revision = store.project_revision(project)
+
+            if workspace_id and not _workspace_already_abandoned(store, project, str(workspace_id)):
+                workspace_payload = {
+                    "lease_id": lease["id"],
+                    "action_key": lease["action_key"],
+                    "reason": "lease_expired",
+                }
+                if host:
+                    workspace_payload["host"] = host
+                workspace_payload["workspace_id"] = workspace_id
+                store._event(
+                    semantic_revision,
+                    project,
+                    "workspace_abandoned",
+                    "workspace",
+                    str(workspace_id),
+                    "runtime",
+                    workspace_payload,
+                )
+                workspace_event_id = int(store.conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+                abandoned_by_project[project].append(str(workspace_id))
+                envelopes.append(
+                    {
+                        "event_id": workspace_event_id,
+                        "revision": semantic_revision,
+                        "semantic_revision": semantic_revision,
+                        "project_id": project,
+                        "event_type": "workspace_abandoned",
+                        "entity_type": "workspace",
+                        "entity_id": str(workspace_id),
+                        "payload": workspace_payload,
+                    }
+                )
+
             store.conn.execute("DELETE FROM leases WHERE id = ?", (lease["id"],))
-            semantic_revision = store.project_revision(lease["project_id"])
             payload = {
                 "action_key": lease["action_key"],
                 "action_kind": lease["action_kind"],
@@ -157,9 +216,13 @@ def recover_expired_leases(store: StateStore, project_id: str | None = None) -> 
                 "leased_by": lease["leased_by"],
                 "expires_at": lease["expires_at"],
             }
+            if host:
+                payload["host"] = host
+            if workspace_id:
+                payload["workspace_id"] = workspace_id
             store._event(
                 semantic_revision,
-                lease["project_id"],
+                project,
                 "lease_expired",
                 "lease",
                 lease["id"],
@@ -172,7 +235,7 @@ def recover_expired_leases(store: StateStore, project_id: str | None = None) -> 
                     "event_id": event_id,
                     "revision": semantic_revision,
                     "semantic_revision": semantic_revision,
-                    "project_id": lease["project_id"],
+                    "project_id": project,
                     "event_type": "lease_expired",
                     "entity_type": "lease",
                     "entity_id": lease["id"],
@@ -181,7 +244,10 @@ def recover_expired_leases(store: StateStore, project_id: str | None = None) -> 
             )
         for affected_project, leases in by_project.items():
             semantic_revision = store.project_revision(affected_project)
-            payload = {"expired_lease_ids": [lease["id"] for lease in leases]}
+            payload = {
+                "expired_lease_ids": [lease["id"] for lease in leases],
+                "abandoned_workspace_ids": abandoned_by_project.get(affected_project, []),
+            }
             store._event(
                 semantic_revision,
                 affected_project,
@@ -237,6 +303,11 @@ def recover_expired_leases(store: StateStore, project_id: str | None = None) -> 
     return {
         "recovered": len(expired),
         "leases": expired,
+        "abandoned_workspaces": [
+            {"project_id": pid, "workspace_id": workspace_id}
+            for pid in sorted(abandoned_by_project)
+            for workspace_id in abandoned_by_project[pid]
+        ],
         "frontiers": {
             pid: store.frontier(pid, limit=10) for pid in sorted(by_project)
         },
