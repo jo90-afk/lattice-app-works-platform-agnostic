@@ -26,6 +26,8 @@
 - Serialized hosted-delta acceptance by rechecking `base_revision` inside the project write boundary immediately before semantic mutation; two deltas prepared from the same old revision cannot both commit even when they target different actions.
 - Routed the primary CLI claim and hosted-delta paths through the 0.0.6 atomic implementations so legacy entrypoints cannot bypass concurrency semantics.
 - Made Postgres global snapshot revision allocation atomic with `UPDATE ... RETURNING`, preserving distinct monotonic revisions when unrelated projects mutate concurrently under different project advisory locks.
+- Made direct Postgres semantic mutations intrinsically acquire the canonical project advisory lock, so project status, objectives, milestones, records, truths, readiness conditions, commitments, and exceptions cannot bypass shared-writer serialization.
+- Added a live Postgres same-record race proving concurrent direct writers become successive versions rather than duplicate-version failures or lost updates.
 
 ## 0.0.5
 

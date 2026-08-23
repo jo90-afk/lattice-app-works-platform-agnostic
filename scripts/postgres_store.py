@@ -6,9 +6,10 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from sql_dialect import PostgresConnectionAdapter, postgres_schema
+from state_backend import project_lock_key
 from state_engine import LatticeError, SNAPSHOT_TABLES, StateStore, utc_now
 
 
@@ -37,7 +38,7 @@ SNAPSHOT_ORDER = {
 
 
 class PostgresStateStore(StateStore):
-    """Run the guarded StateStore semantics on a supplied Postgres connection.
+    """Run canonical StateStore semantics with intrinsic project serialization.
 
     Postgres is the operational authority after bootstrap. A repository snapshot is
     imported automatically only into an empty operational store. Implicit exports
@@ -86,6 +87,105 @@ class PostgresStateStore(StateStore):
             raise LatticeError("Postgres state meta has no revision row")
         return int(row[0])
 
+    def _project_write(self, project_id: str, operation: Callable[[], Any]) -> Any:
+        """Serialize one whole direct semantic call, including committed readback.
+
+        Canonical StateStore methods intentionally commit their own transition and
+        may query the committed row again before returning. A transaction advisory
+        lock would be released at that internal commit, allowing the next writer to
+        change the row before the first caller receives its result. A session-level
+        advisory lock spans those internal transaction boundaries and is explicitly
+        released here in all cases.
+        """
+        key = project_lock_key(project_id)
+        cursor = self.conn.raw.cursor()
+        cursor.execute("SELECT pg_advisory_lock(%s)", (key,))
+        try:
+            result = operation()
+            self.conn.commit()
+            return result
+        except Exception:
+            self.conn.rollback()
+            raise
+        finally:
+            # If the operation failed, rollback above first clears any aborted
+            # transaction so the unlock statement can execute. The explicit commit
+            # makes the adapter transaction state match the underlying connection.
+            unlock = self.conn.raw.cursor()
+            unlock.execute("SELECT pg_advisory_unlock(%s)", (key,))
+            self.conn.commit()
+
+    def _project_for_truth(self, truth_id: str) -> str:
+        row = self.conn.execute(
+            "SELECT project_id FROM truths WHERE id = ?", (truth_id,)
+        ).fetchone()
+        if row is None:
+            raise LatticeError("Unknown truth: " + truth_id)
+        return str(row["project_id"])
+
+    def ensure_project(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).ensure_project(project_id, *args, **kwargs)
+        )
+
+    def set_project_status(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).set_project_status(project_id, *args, **kwargs)
+        )
+
+    def add_objective(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).add_objective(project_id, *args, **kwargs)
+        )
+
+    def add_milestone(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).add_milestone(project_id, *args, **kwargs)
+        )
+
+    def put_record(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).put_record(project_id, *args, **kwargs)
+        )
+
+    def add_truth(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).add_truth(project_id, *args, **kwargs)
+        )
+
+    def revise_truth(self, truth_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        project_id = self._project_for_truth(truth_id)
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).revise_truth(truth_id, *args, **kwargs)
+        )
+
+    def move_truth(self, truth_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        project_id = self._project_for_truth(truth_id)
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).move_truth(truth_id, *args, **kwargs)
+        )
+
+    def link_truths(self, from_truth_id: str, *args: Any, **kwargs: Any) -> None:
+        project_id = self._project_for_truth(from_truth_id)
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).link_truths(from_truth_id, *args, **kwargs)
+        )
+
+    def add_condition(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).add_condition(project_id, *args, **kwargs)
+        )
+
+    def add_commitment(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).add_commitment(project_id, *args, **kwargs)
+        )
+
+    def raise_exception(self, project_id: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self._project_write(
+            project_id, lambda: super(PostgresStateStore, self).raise_exception(project_id, *args, **kwargs)
+        )
+
     def _load_snapshot(self, snapshot: dict[str, Any]) -> None:
         super()._load_snapshot(snapshot)
         with self.conn:
@@ -117,7 +217,6 @@ class PostgresStateStore(StateStore):
         payload = self._snapshot_payload()
         if destination is None:
             return payload
-
         target = destination.resolve()
         target.parent.mkdir(parents=True, exist_ok=True)
         temporary = target.with_suffix(target.suffix + ".tmp")
@@ -133,7 +232,6 @@ class PostgresStateStore(StateStore):
         return payload
 
     def import_snapshot(self, source: Path, expected_revision: int | None = None) -> None:
-        """Explicit import remains available but is never performed implicitly on a live store."""
         if expected_revision is not None and self.revision != expected_revision:
             raise LatticeError(
                 f"State revision changed: expected {expected_revision}, current {self.revision}"
