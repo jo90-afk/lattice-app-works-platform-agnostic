@@ -1,0 +1,67 @@
+name: Temporary UI dedup patch
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'fix/0.1.2-control-surface-dedup'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/0.1.2-control-surface-dedup
+      - name: Apply narrow control-surface patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+
+          p = Path('scripts/control_server.py')
+          s = p.read_text()
+          replacements = {
+              "f\"{blocking} decision{'s' if blocking != 1 else ''} need your attention.\",": "f\"{blocking} {'decisions need' if blocking != 1 else 'decision needs'} your attention.\",",
+              "def _project_card(item: dict) -> str:": "def _project_card(item: dict, principal_action_keys: set[str], principal_exception_ids: set[str]) -> str:",
+              "    frontier = item.get(\"frontier\") or []": "    frontier = [action for action in (item.get(\"frontier\") or []) if action.get(\"action_key\") not in principal_action_keys]",
+              "    exceptions = item.get(\"open_exceptions\") or []": "    exceptions = [exception for exception in (item.get(\"open_exceptions\") or []) if exception.get(\"id\") not in principal_exception_ids]",
+              "    projects = \"\".join(_project_card(item) for item in model.get(\"projects\", [])) or \"<p class='empty'>No projects are registered.</p>\"": "    principal_action_keys = {item[\"action_key\"] for item in inbox.get(\"items\", [])}\n    principal_exception_ids = {item[\"target_id\"] for item in inbox.get(\"items\", []) if item.get(\"kind\") == \"exception\"}\n    projects = \"\".join(_project_card(item, principal_action_keys, principal_exception_ids) for item in model.get(\"projects\", [])) or \"<p class='empty'>No projects are registered.</p>\"",
+              "server_version = \"LatticeControl/0.1.1\"": "server_version = \"LatticeControl/0.1.2\"",
+              "<code>0.1.1 ·": "<code>0.1.2 ·",
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'missing expected control_server fragment: {old}')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          Path('VERSION').write_text('0.1.2\n')
+          readme = Path('README.md').read_text().replace('# Lattice App Works 0.1.1', '# Lattice App Works 0.1.2', 1)
+          Path('README.md').write_text(readme)
+          manifest_path = Path('seed/SEED-MANIFEST.json')
+          manifest = json.loads(manifest_path.read_text())
+          manifest['version'] = '0.1.2'
+          manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
+
+          changelog = Path('CHANGELOG.md').read_text()
+          entry = """## 0.1.2\n\n- Removed Principal-owned actions from each project's `Next` list because the same authority boundary is already presented once, with context and controls, in `Your decisions`.\n- Removed Principal-only exceptions from the duplicate project attention list while retaining the affected project's blocked/readiness state.\n- Corrected singular/plural decision headline grammar discovered in the 0.1.1 visual sandbox.\n\n"""
+          if '## 0.1.2' not in changelog:
+              changelog = changelog.replace('# Changelog\n\n', '# Changelog\n\n' + entry, 1)
+          Path('CHANGELOG.md').write_text(changelog)
+
+          test = Path('tests/test_control_server.py')
+          ts = test.read_text()
+          needle = "            self.assertIn(\"Resolve exception\", page)\n            self.assertNotIn(\"This surface is read-only\", page)"
+          replacement = "            self.assertIn(\"Resolve exception\", page)\n            self.assertIn(\"1 decision needs your attention.\", page)\n            self.assertEqual(page.count(\"principal · resolve_exception\"), 0)\n            self.assertNotIn(\"This surface is read-only\", page)"
+          if needle not in ts:
+              raise SystemExit('missing expected control-server test fragment')
+          test.write_text(ts.replace(needle, replacement, 1))
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add scripts/control_server.py tests/test_control_server.py VERSION README.md seed/SEED-MANIFEST.json CHANGELOG.md
+          git commit -m "Fix decision duplication in control surface"
+          git push origin HEAD:fix/0.1.2-control-surface-dedup
