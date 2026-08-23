@@ -11,6 +11,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from hooks import dispatch_hooks
 from state_engine import LatticeError, StateStore, utc_now
 
 
@@ -47,6 +48,7 @@ def record_lifecycle_event(
     host: str | None = None,
     workspace_id: str | None = None,
     payload: dict[str, Any] | None = None,
+    run_hooks: bool = True,
 ) -> dict[str, Any]:
     """Persist a host/runtime event without allowing it to rewrite project truth."""
     if event_type not in LIFECYCLE_EVENTS:
@@ -69,7 +71,7 @@ def record_lifecycle_event(
             event_payload,
         )
     store.export_snapshot()
-    return {
+    result = {
         "revision": revision,
         "project_id": project_id,
         "event_type": event_type,
@@ -77,13 +79,15 @@ def record_lifecycle_event(
         "entity_id": entity_id,
         "payload": event_payload,
     }
+    result["hooks"] = dispatch_hooks(store.root, event_type, result) if run_hooks else []
+    return result
 
 
 def recover_expired_leases(
     store: StateStore,
     project_id: str | None = None,
 ) -> dict[str, Any]:
-    """Remove expired leases, retain an audit event, and recompute affected frontiers."""
+    """Remove expired leases, retain audit events, dispatch hooks, and recompute affected frontiers."""
     now = utc_now()
     parameters: tuple[Any, ...]
     where = "expires_at <= ?"
@@ -100,14 +104,22 @@ def recover_expired_leases(
         ).fetchall()
     ]
     if not expired:
-        return {"recovered": 0, "leases": [], "frontiers": {}}
+        return {"recovered": 0, "leases": [], "frontiers": {}, "hook_results": []}
 
     by_project: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    lifecycle_envelopes: list[dict[str, Any]] = []
     with store.conn:
         for lease in expired:
             by_project[lease["project_id"]].append(lease)
             store.conn.execute("DELETE FROM leases WHERE id = ?", (lease["id"],))
             revision = store._bump_revision()
+            payload = {
+                "action_key": lease["action_key"],
+                "action_kind": lease["action_kind"],
+                "target_id": lease["target_id"],
+                "leased_by": lease["leased_by"],
+                "expires_at": lease["expires_at"],
+            }
             store._event(
                 revision,
                 lease["project_id"],
@@ -115,16 +127,19 @@ def recover_expired_leases(
                 "lease",
                 lease["id"],
                 "runtime",
-                {
-                    "action_key": lease["action_key"],
-                    "action_kind": lease["action_kind"],
-                    "target_id": lease["target_id"],
-                    "leased_by": lease["leased_by"],
-                    "expires_at": lease["expires_at"],
-                },
+                payload,
             )
+            lifecycle_envelopes.append({
+                "revision": revision,
+                "project_id": lease["project_id"],
+                "event_type": "lease_expired",
+                "entity_type": "lease",
+                "entity_id": lease["id"],
+                "payload": payload,
+            })
         for affected_project, leases in by_project.items():
             revision = store._bump_revision()
+            payload = {"expired_lease_ids": [lease["id"] for lease in leases]}
             store._event(
                 revision,
                 affected_project,
@@ -132,9 +147,24 @@ def recover_expired_leases(
                 "project",
                 affected_project,
                 "runtime",
-                {"expired_lease_ids": [lease["id"] for lease in leases]},
+                payload,
             )
+            lifecycle_envelopes.append({
+                "revision": revision,
+                "project_id": affected_project,
+                "event_type": "recovery_completed",
+                "entity_type": "project",
+                "entity_id": affected_project,
+                "payload": payload,
+            })
     store.export_snapshot()
+    hook_results = []
+    for envelope in lifecycle_envelopes:
+        hook_results.append({
+            "event_type": envelope["event_type"],
+            "entity_id": envelope["entity_id"],
+            "results": dispatch_hooks(store.root, envelope["event_type"], envelope),
+        })
     return {
         "recovered": len(expired),
         "leases": expired,
@@ -142,6 +172,7 @@ def recover_expired_leases(
             affected_project: store.frontier(affected_project, limit=10)
             for affected_project in sorted(by_project)
         },
+        "hook_results": hook_results,
     }
 
 
@@ -178,6 +209,7 @@ def claim_for_host(
     )
     claimed["control_revision"] = event["revision"]
     claimed["recovery"] = {"recovered": recovery["recovered"]}
+    claimed["hooks"] = event["hooks"]
     return claimed
 
 
