@@ -1,10 +1,12 @@
 # Concurrency Semantics
 
-Lattice 0.0.6 starts by making ownership semantics explicit before adding a shared remote database.
+Lattice 0.0.6 makes ownership and shared-writer semantics explicit without introducing a second project-state model.
 
 ## Atomic hosted claim
 
-Hosted claims execute inside the selected backend's project-write transaction boundary. For SQLite, that boundary is `BEGIN IMMEDIATE`: frontier derivation, project WIP checks, role WIP checks, and lease insertion therefore occur while competing local writers are serialized. The durable `action_claimed` event remains operational telemetry and does not advance semantic project revision.
+Hosted claims execute inside the selected backend's project-write transaction boundary. SQLite uses `BEGIN IMMEDIATE`, so frontier derivation, project WIP checks, role WIP checks, and lease insertion occur while competing local writers are serialized. Postgres uses a project-scoped transaction advisory lock, allowing unrelated projects to proceed independently while writes to the same project serialize.
+
+The durable `action_claimed` event remains operational telemetry and does not advance semantic project revision.
 
 ## Lease renewal
 
@@ -29,32 +31,47 @@ Example envelope:
 }
 ```
 
-## Operational state backend
+## Operational state backends
 
 `scripts/state_backend.py` defines the transaction boundary used by concurrency-critical operations. It deliberately does not define a second truth model or snapshot format.
 
-The current implementations are:
+The implementations are:
 
 - `SQLiteStateBackend` — default local backend; serializes writers with `BEGIN IMMEDIATE`.
-- `PostgresStateBackend` — reference shared-writer boundary; starts a transaction and acquires a stable project-scoped `pg_advisory_xact_lock` before guarded project writes.
+- `PostgresStateBackend` — shared-writer backend; acquires a deterministic project-scoped `pg_advisory_xact_lock` inside the connection's current DB-API transaction.
 
-The Postgres adapter accepts a DB-API-style connection and imports no Postgres driver. Local installations therefore retain the standard-library-only runtime. A distributed installation may supply its own compatible driver when the full shared-store constructor is enabled.
+Claim, renewal, release, submission, failure, verification, milestone acceptance, commitment fulfillment, and exception resolution enter the same backend project-write boundary before invoking the existing guarded `StateStore` transition. The backend does not replace those transitions; it serializes the authority decision around them.
 
-The advisory-lock key is derived deterministically from the project ID, so separate runtimes serialize consequential writes to the same project while unrelated projects can proceed independently.
+## Postgres StateStore
 
-Claim, renewal, release, submission, failure, verification, milestone acceptance, commitment fulfillment, and exception resolution now enter the same backend project-write boundary before invoking the existing guarded `StateStore` transition. The backend does not replace those transitions; it serializes the authority decision around them.
+`scripts/postgres_store.py` runs the canonical `StateStore` semantics on a supplied DB-API Postgres connection. It uses the compatibility layer in `scripts/sql_dialect.py` for parameter syntax and sqlite3.Row-compatible result access, renders Postgres DDL from the canonical `runtime/schema.sql`, and preserves `state/current.json` as the portable snapshot contract.
 
-Remaining 0.0.6 storage work is to make `StateStore` construction and SQL execution backend-capable, then prove race behavior for non-leased semantic mutations and concurrent acceptance paths before enabling a Postgres-backed runtime.
+Snapshot export uses explicit primary/composite key ordering rather than SQLite `rowid`. Snapshot import repairs the Postgres `events.id` sequence after inserting portable explicit event IDs, so subsequent events continue monotonically.
+
+Postgres driver selection remains outside the core. The default installation is still Python's standard library plus SQLite. A shared deployment installs a compatible `psycopg` driver and sets:
+
+```bash
+export LATTICE_DATABASE_URL='postgresql://user:password@host/database'
+python3 scripts/shared_host_adapter.py --file envelope.json
+```
+
+`scripts/store_factory.py` loads `psycopg` only when a Postgres URL is explicitly configured. The ordinary local CLI remains SQLite-first.
+
+## Validation
+
+CI starts a real Postgres service and runs the guarded lifecycle through it: objective and milestone creation, condition derivation, hosted claim, submission, independent verification, and Assurance acceptance. The same test then exports the portable snapshot, rebuilds a clean Postgres schema from it, verifies semantic state survives, and proves event sequencing continues after the imported maximum ID.
+
+Postgres support is therefore gated by the same semantic lifecycle rather than by adapter-unit tests alone.
 
 ## Invariants
 
-Every operational backend must preserve at least these rules:
+Every operational backend preserves these rules:
 
 - one active lease per action key;
 - project and role WIP limits are checked atomically with lease creation;
 - lease renewal requires the current owner;
 - expired authority cannot be resurrected;
 - semantic revisions are distinct from operational event sequence;
-- unrelated projects should not share a project-scoped lock in distributed backends;
+- unrelated projects do not share a project-scoped lock in distributed backends;
 - acceptance and verification remain guarded state transitions rather than host-side convention;
 - `state/current.json` remains the portable snapshot contract.
