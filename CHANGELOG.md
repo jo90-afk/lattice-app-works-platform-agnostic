@@ -6,6 +6,8 @@
 - Made the local control surface open the configured operational backend instead of always reading local SQLite, so shared Postgres deployments and human supervision cannot silently diverge.
 - Added a supervision projection with portfolio summary, Principal-only decision count, recent accepted changes, backend identity, and operational telemetry without creating a second writable state model.
 - Expanded the read-only browser surface to show portfolio-level activity, semantic/event revision identity, frontier truths, evidence, verification, exceptions, and runtime health signals.
+- Enriched every Principal-only exception and Principal-owned commitment with the exact decision required, the authority rule that forced escalation, affected project/target state, available durable evidence, and only state-machine-supported choices with their consequences.
+- Rendered decision-grade Principal cards while keeping the browser strictly read-only; resolve/fulfill actions still require the guarded runtime rather than an implicit UI mutation path.
 
 ## 0.0.6
 
