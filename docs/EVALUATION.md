@@ -44,6 +44,42 @@ Every result also carries `state_fingerprint` and `acceptance_fingerprint`. Thes
 
 The harness rejects impossible relationships such as more false acceptances than accepted changes, more successful recoveries than worker losses, or more verification catches than defects presented.
 
+## Executable scenarios
+
+`scripts/evaluation_scenarios.py` runs bounded scenarios against a fresh temporary Lattice store and emits a validated result object. The first executable set exercises existing production control-plane boundaries rather than synthetic table fixtures:
+
+```bash
+python3 scripts/evaluation_scenarios.py greenfield-feature-delivery
+python3 scripts/evaluation_scenarios.py verifier-disagreement
+python3 scripts/evaluation_scenarios.py worker-crash-and-lease-expiry
+```
+
+### Greenfield feature delivery
+
+The runner creates a deterministic project/objective/milestone/condition, claims owner work through the atomic host boundary, submits the result, obtains a fresh Quality verdict, and advances through Assurance. The scenario passes only if the condition is satisfied and the milestone is accepted.
+
+### Verifier disagreement
+
+The owner submits a result explicitly seeded with an evaluation defect. Quality records `NOT_SATISFIED`. The scenario passes only if the condition and milestone remain unaccepted. The seeded defect then contributes one presented defect and one verification catch to the evaluation metrics.
+
+### Worker crash and lease expiry
+
+The runner first acquires a real guarded lease. Its only direct state manipulation is evaluation fault injection: the lease expiry is moved into the past to model a vanished host without introducing a wall-clock sleep. Production recovery must detect the expired lease, audit recovery, return the same derived intent to the frontier, allow another worker to reclaim it, and carry it through independent verification and Assurance acceptance. The injected failure is not itself a production mutation path.
+
+CI executes all three scenarios as command-line runs, writes their result JSON, and feeds those results back through `scripts/evaluation.py summarize` before the ordinary unit/Postgres suite runs.
+
+## Semantic fingerprints
+
+`scripts/evaluation_fingerprint.py` derives host-neutral fingerprints from canonical project meaning.
+
+The full state fingerprint includes project/objective/milestone state, current records and truths, truth links, readiness conditions and their accepted inputs, submissions, reviews, evidence, commitments, and exceptions. Generated submission/review/evidence IDs, event IDs, lease IDs, timestamps, host identity, workspace identity, and lifecycle ordering are excluded.
+
+The narrower acceptance fingerprint includes milestone status, condition status/version/attempt state, accepted record/truth versions, and independent review verdicts.
+
+Evaluation scenarios use deterministic IDs for durable seeded entities. Generated runtime identities are intentionally not part of either fingerprint. A test runs the same greenfield scenario under different host labels and requires identical state and acceptance fingerprints.
+
+This establishes the comparison mechanism; it does **not** yet claim that distinct external host adapters have been proven portable. Later 0.0.8 slices must run the same bounded scenario through genuinely different supported host paths.
+
 ## Summary metrics
 
 Summaries correspond directly to the roadmap's autonomy metrics:
@@ -73,7 +109,7 @@ When the same scenario appears for more than one host, the summary compares `sta
 
 A host may use different workspaces, tools, models, or execution strategies. Lattice's claim is narrower: host-specific execution must not change the durable state meaning or acceptance semantics of the bounded scenario.
 
-The initial 0.0.8 harness defines and tests this comparison contract. Later 0.0.8 slices will add executable scenario drivers, adversarial state cases, and host adapters that emit these results from real runs.
+The fingerprint and result contracts are now executable. Distinct host-adapter evaluation remains explicit future 0.0.8 work rather than being inferred from a changed host label.
 
 ## Evidence discipline
 

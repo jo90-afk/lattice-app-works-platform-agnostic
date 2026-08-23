@@ -7,6 +7,9 @@
 - Made unexercised metric denominators report as unknown rather than zero, preventing absent evidence from appearing as perfect reliability.
 - Added host-neutral state and acceptance fingerprints plus cross-host equivalence reporting so portability is measured rather than assumed.
 - Documented the separation between evaluation evidence and project authority: evaluation results observe control-plane behavior but do not bypass guarded project transitions.
+- Added executable greenfield delivery, verifier-disagreement, and worker-loss/recovery scenarios that drive the production claim, submission, independent verification, recovery, and Assurance boundaries and emit validated evaluation results.
+- Added semantic and acceptance fingerprints that exclude generated runtime identity, timestamps, leases, workspaces, hosts, and event ordering while retaining governed project meaning and evidence/verification outcomes.
+- Added a CI gate that runs the executable scenarios, writes their result JSON, and aggregates the resulting autonomy evidence before the full SQLite/Postgres regression suite.
 
 ## 0.0.7
 

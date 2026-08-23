@@ -35,6 +35,13 @@ jobs:
         run: python3 scripts/lattice.py validate
       - name: Validate evaluation scenario registry
         run: python3 scripts/evaluation.py validate
+      - name: Run executable autonomy evaluations
+        run: |
+          mkdir -p /tmp/lattice-evals
+          python3 scripts/evaluation_scenarios.py greenfield-feature-delivery --host ci --run-id ci-greenfield > /tmp/lattice-evals/greenfield.json
+          python3 scripts/evaluation_scenarios.py verifier-disagreement --host ci --run-id ci-verifier > /tmp/lattice-evals/verifier.json
+          python3 scripts/evaluation_scenarios.py worker-crash-and-lease-expiry --host ci --run-id ci-recovery > /tmp/lattice-evals/recovery.json
+          python3 scripts/evaluation.py summarize /tmp/lattice-evals/*.json
       - name: Install optional Postgres test driver
         run: python3 -m pip install "psycopg[binary]>=3.2,<4"
       - name: Run state-engine tests
