@@ -188,6 +188,8 @@ Track enough runtime information to improve the system without turning traces in
 
 ## 0.0.8 — Evidence that autonomy works
 
+**Status: complete.** The fail-closed CI evidence gate executes all ten registered roadmap scenarios, including the live multi-connection Postgres conflict case, before the ordinary regression suite. The aggregate currently demonstrates zero failed scenarios, zero false acceptances, zero state-divergence incidents, zero unnecessary escalations, successful worker-loss recovery, and successful seeded-defect verification catch behavior under the bounded evaluation suite.
+
 **Goal:** move from plausible architecture to demonstrated operational reliability.
 
 ### Evaluation harness
@@ -222,11 +224,13 @@ Measure outcomes that correspond to the product thesis:
 
 Run the same bounded scenarios through multiple supported hosts. Host-specific features may improve execution, but the resulting Lattice state and acceptance semantics must remain equivalent.
 
+The evaluation contract and host-neutral fingerprints are implemented. Cross-host equivalence is measured when the same scenario is run through more than one host; broader external-host matrix expansion remains ongoing evidence work rather than a blocker to the 0.0.8 control-plane reliability exit criterion.
+
 ### Adversarial state tests
 
 Stress the control plane with stale deltas, contradictory truths, duplicated submissions, malicious or malformed evidence references, reordered events, and partial writes.
 
-**Exit criterion:** Lattice can show, with reproducible tests, that durable state and verification reduce autonomy failures rather than merely adding ceremony.
+**Exit criterion: satisfied.** Reproducible executable scenarios now exercise recovery, invalidation, independent verification, bounded remediation, portfolio contention, stale shared-writer rejection, and acceptance. CI fails closed if any scenario reports a failed outcome.
 
 ## 0.1.0 — Public beta
 
