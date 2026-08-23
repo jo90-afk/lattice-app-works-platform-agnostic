@@ -12,6 +12,7 @@
 - Rendered consequence relationships as an accessible source → relation → target view, so the control surface explains both why work exists and why accepted state is trusted without depending on a decorative spatial visualization.
 - Added temporal supervision derived from existing timestamps and events: lease age/remaining authority, verification wait, exception age, blocked-condition age, completed action durations, retries, recovery counts, exception frequency, and verification failure rate.
 - Exposed raw elapsed seconds and rates in `/api/state` while rendering human-readable ages in the browser; no synthetic health score or new trace state is introduced.
+- Added a real-Postgres mixed-portfolio exit scenario proving one read-only supervision projection can simultaneously explain live leased work, accepted/evidenced change, blocked remediation, the exact Principal-only decision boundary, and operational history without reading project files or creating a UI mutation path.
 
 ## 0.0.6
 
