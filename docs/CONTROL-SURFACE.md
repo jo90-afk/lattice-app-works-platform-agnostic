@@ -19,6 +19,14 @@ Before the claim is made, expired leases for the project are recovered and audit
 
 Use `python3 scripts/lattice.py inspect` for the read-only control projection and `python3 scripts/lattice.py recover --project <id>` for explicit recovery.
 
+## Semantic revision and event sequence
+
+Hosted deltas are guarded by the project's semantic revision: the last revision that changed project truth, readiness, commitments, exceptions, or another governed project-state entity. Operational lifecycle telemetry does not advance that revision.
+
+The control read model exposes a separate `event_sequence` based on durable event IDs. This lets hosts and the human control surface observe claims, workspaces, timeouts, recovery, and hook failures without making those observations invalidate otherwise-current hosted work.
+
+A lifecycle event therefore carries both an `event_id` and the semantic revision at which it occurred. `state_revision` and hosted `base_revision` continue to mean semantic project state, not telemetry sequence.
+
 ## Local control surface
 
 Start the dependency-free local server:
@@ -47,10 +55,12 @@ The first surface is intentionally read-only. It shows active objective and mile
 }
 ```
 
-Hooks receive the event envelope as JSON on stdin, run from the repository root in declaration order, and fail closed on a nonzero exit. Commands are executed directly rather than through a shell.
+Hooks receive the event envelope as JSON on stdin, run from the repository root in declaration order, and execute directly rather than through a shell.
+
+Lifecycle hooks are post-commit integrations. A nonzero hook exit is recorded as `hook_failed`; it does not pretend that the triggering durable event never happened. For an `action_claimed` hook failure, Lattice fails closed before handing the claim to a worker: it releases the lease and records `claim_aborted`, returning the action to the normally derived frontier. This prevents an error response from leaving hidden in-flight work behind.
 
 Hooks do not receive a separate state mutation API. Any project-state change must still go through a guarded Lattice operation.
 
 ## Validation
 
-This integration is validated against the repository's active seed contract, including capsule/state agreement, machine-readable capabilities, and the absence of legacy process-backlog artifacts.
+This integration is validated against the repository's active seed contract, including capsule/state agreement, machine-readable capabilities, release-version consistency, and the absence of legacy process-backlog artifacts.
