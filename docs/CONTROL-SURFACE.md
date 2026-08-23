@@ -65,7 +65,8 @@ The projection adds:
 - the existing Principal-only decision inbox;
 - recent accepted semantic changes across the selected portfolio or project;
 - operational counts for claims, completions, recovery, lease expiry, worker failure, hook failure, and claim aborts;
-- observed host identities from lifecycle telemetry.
+- observed host identities from lifecycle telemetry; and
+- a consequence graph derived for each shown project.
 
 The existing project projection remains intact underneath it: objective, milestone, semantic revision, readiness, frontier, active leases, pending verification, exceptions, frontier truths, evidence chain, and recent events.
 
@@ -86,6 +87,29 @@ Each item is projected with enough context to decide without reconstructing the 
 For a Principal-only exception the supported choices are `resolve` with an explicit durable resolution, or `leave_open`. For a Principal-owned commitment they are `fulfill` with a recorded summary, or `leave_open`. The browser renders those choices and consequences for supervision but still exposes no mutation buttons or forms. A later write interaction must route through the same guarded claim/resolve/fulfill transitions rather than inventing UI authority.
 
 Routine remediation, ordinary verification, and Director-owned commitments remain outside the inbox.
+
+## Project consequence graph
+
+`scripts/project_graph.py` derives the project as a consequence graph from relationships that already exist in canonical state. It is not stored and does not create work.
+
+The graph is scoped to the active objective and its milestones. It can contain:
+
+- requirements, constraints, decisions, contracts, risks, and artifact records linked as condition inputs;
+- truths linked as premises for readiness;
+- condition dependency ordering;
+- conditions gating milestones;
+- submissions claiming satisfaction of conditions;
+- independent reviews verifying submissions;
+- evidence supporting submissions or reviews;
+- open exceptions and commitments that block governed state;
+- objective and milestone structure; and
+- current frontier actions, explicitly marked as derived rather than durable project entities.
+
+Relations are named rather than inferred from layout: `constrains`, `premise_for`, `must_precede`, `gates`, `claims_satisfaction_of`, `verifies`, `supports`, `blocks`, `owes`, and `derived_for`.
+
+The browser renders these as source → relation → target chains with entity-type labels and node counts. This is intentionally accessible and inspectable on mobile. A later spatial visualization can consume the same graph contract, but spatial position must not become a second source of meaning or project truth.
+
+The graph answers two supervision questions from one model: why a frontier action exists, and what evidence/verification makes accepted state trustworthy.
 
 ## Local control surface
 
@@ -126,4 +150,4 @@ Hooks do not receive a separate state mutation API. Any project-state change mus
 
 ## Validation
 
-The surface is validated against the same repository contract and Postgres-backed concurrency suite as the runtime. Rendering tests also require it to remain read-only: there are no mutation forms, buttons, or hidden UI write paths.
+The surface is validated against the same repository contract and Postgres-backed concurrency suite as the runtime. Graph regressions assert the causal and evidence relationships directly, and rendering tests require those relation names to survive into the human surface. The browser remains read-only: there are no mutation forms, buttons, or hidden UI write paths.
