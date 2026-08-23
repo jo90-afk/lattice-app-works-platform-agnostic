@@ -15,6 +15,13 @@ State the authorizing work order, decision record, or explicit agency-maintenanc
 
 Describe the exact files and user-visible or governance effects.
 
+## Release version
+
+- [ ] This PR does not change the public release version.
+- [ ] If it does, `VERSION`, the README heading, `CHANGELOG.md`, and `seed/SEED-MANIFEST.json` are updated together.
+
+CI enforces those release-version surfaces through `scripts/check_version.py`.
+
 ## Validation evidence
 
 List validation commands, independent reviews, and outstanding mandatory review or Assurance steps.
