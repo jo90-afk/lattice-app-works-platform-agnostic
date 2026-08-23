@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from sql_dialect import PostgresConnectionAdapter, postgres_schema, postgres_sql  # noqa: E402
+from sql_dialect import PostgresConnectionAdapter, PostgresCursorAdapter, postgres_schema, postgres_sql  # noqa: E402
 
 
 class RecordingCursor:
@@ -79,6 +79,16 @@ class SQLDialectTest(unittest.TestCase):
         )
         connection.commit()
         self.assertEqual(raw.commits, 1)
+
+    def test_postgres_rows_preserve_name_and_integer_index_access(self):
+        cursor = RecordingCursor(
+            rows=[("project-001", "Project")],
+            description=[("id",), ("name",)],
+        )
+        row = PostgresCursorAdapter(cursor).fetchone()
+        self.assertEqual(row[0], "project-001")
+        self.assertEqual(row["id"], "project-001")
+        self.assertEqual(dict(row), {"id": "project-001", "name": "Project"})
 
 
 if __name__ == "__main__":
