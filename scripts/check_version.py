@@ -30,6 +30,10 @@ def main() -> int:
     if seed.get("version") != version:
         errors.append("seed/SEED-MANIFEST.json version does not match VERSION")
 
+    control_server = (ROOT / "scripts" / "control_server.py").read_text(encoding="utf-8")
+    if f'LatticeControl/{version}' not in control_server:
+        errors.append("control server release identifier does not match VERSION")
+
     if errors:
         print("Release version validation failed:")
         for error in errors:
