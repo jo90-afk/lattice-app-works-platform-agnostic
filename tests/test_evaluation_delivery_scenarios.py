@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from evaluation import summarize  # noqa: E402
+from evaluation import summarize_results  # noqa: E402
 from evaluation_delivery_scenarios import run_delivery_scenario  # noqa: E402
 
 
@@ -45,7 +45,7 @@ class DeliveryEvaluationScenarioTest(unittest.TestCase):
             run_delivery_scenario(name, host="test", run_id=f"aggregate-{name}")
             for name in ("cross-component-refactor", "migration-work", "ci-remediation")
         ]
-        summary = summarize(results)
+        summary = summarize_results(results)
         self.assertEqual(summary["outcomes"].get("failed", 0), 0)
         self.assertEqual(summary["outcomes"]["passed"], 3)
         self.assertEqual(summary["metrics"]["state_divergence_incidents"], 0)
