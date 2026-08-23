@@ -10,9 +10,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from control_plane import read_model
-from state_engine import LatticeError, StateStore
-from supervision import principal_inbox
+from state_engine import LatticeError
+from store_factory import open_state_store
+from supervision_model import supervision_model
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -26,13 +26,45 @@ def _rows(values, primary, secondary):
     )
 
 
+def _metric(label: str, value: object) -> str:
+    return f"<div class='metric'><span>{html.escape(label)}</span><strong>{html.escape(str(value))}</strong></div>"
+
+
+def _change_label(change: dict) -> str:
+    labels = {
+        "milestone_accepted": "Milestone accepted",
+        "submission_reviewed": "Verification recorded",
+        "truth_recorded": "Truth recorded",
+        "truth_revised": "Truth revised",
+        "truth_attention_changed": "Truth attention changed",
+        "record_created": "Record created",
+        "record_revised": "Record revised",
+        "condition_added": "Condition added",
+        "condition_submitted": "Condition submitted",
+        "commitment_fulfilled": "Commitment fulfilled",
+        "exception_resolved": "Exception resolved",
+    }
+    return labels.get(change["event_type"], change["event_type"].replace("_", " ").title())
+
+
 def render_html(model: dict) -> str:
     inbox = model.get("principal_inbox") or {"count": 0, "blocking_count": 0, "items": []}
+    portfolio = model.get("portfolio") or {}
+    telemetry = model.get("operational_telemetry") or {}
+    backend = model.get("state_backend", "sqlite")
+
     inbox_rows = _rows(
         inbox.get("items", []),
         lambda x: x["title"],
         lambda x: f"{x['project_id']} · {x['kind']}" + (f" · {x['severity']}" if x.get("severity") else ""),
     ) if inbox.get("items") else "<li class='empty'>No Principal decision required.</li>"
+
+    changes = model.get("recent_accepted_changes") or []
+    change_rows = _rows(
+        changes,
+        _change_label,
+        lambda x: f"{x['project_id']} · {x['role']} · r{x['revision']} · {x['created_at']}",
+    ) if changes else "<li class='empty'>No accepted changes recorded yet.</li>"
 
     projects = []
     for item in model["projects"]:
@@ -45,6 +77,7 @@ def render_html(model: dict) -> str:
         exceptions = item["open_exceptions"]
         readiness = item.get("readiness") or {}
         evidence = item.get("evidence_chain") or []
+        truths = item.get("frontier_truths") or []
         ready_label = "ready" if readiness.get("ready") else "not ready"
         readiness_detail = readiness.get("reason") or readiness.get("summary") or "Derived from current milestone predicates."
         evidence_rows = _rows(
@@ -55,7 +88,7 @@ def render_html(model: dict) -> str:
             ),
         )
         projects.append(f"""
-<section class='project'><header><div><p class='eyebrow'>{html.escape(project['status'])}</p><h2>{html.escape(project['name'])}</h2></div><code>{html.escape(project['id'])}</code></header>
+<section class='project'><header><div><p class='eyebrow'>{html.escape(project['status'])}</p><h2>{html.escape(project['name'])}</h2></div><div class='project-meta'><code>{html.escape(project['id'])}</code><span>semantic r{item['semantic_revision']}</span></div></header>
 <div class='current'><div><span>Objective</span><strong>{html.escape(objective['title']) if objective else 'None active'}</strong></div><div><span>Milestone</span><strong>{html.escape(milestone['title']) if milestone else 'None active'}</strong></div></div>
 <div class='grid'>
 <article><h3>Ready now <b>{len(frontier)}</b></h3><ul>{_rows(frontier, lambda x:x['title'], lambda x:f"{x['role']} · {x['kind']}")}</ul></article>
@@ -64,25 +97,40 @@ def render_html(model: dict) -> str:
 <article class='exceptions'><h3>Exceptions <b>{len(exceptions)}</b></h3><ul>{_rows(exceptions, lambda x:x['title'], lambda x:f"{x['severity']} · {x['owner_role']}")}</ul></article>
 </div>
 <div class='evidence-grid'>
-<article><h3>Milestone readiness <b>{html.escape(ready_label)}</b></h3><p class='detail'>{html.escape(str(readiness_detail))}</p></article>
+<article><h3>Milestone readiness <b>{html.escape(ready_label)}</b></h3><p class='detail'>{html.escape(str(readiness_detail))}</p><h3 class='subhead'>Frontier truths <b>{len(truths)}</b></h3><ul>{_rows(truths, lambda x:x['statement'], lambda x:f"{x['epistemic_status']} · v{x['version']}")}</ul></article>
 <article><h3>Evidence chain <b>{len(evidence)}</b></h3><ul>{evidence_rows}</ul></article>
 </div></section>""")
     body = "".join(projects) or "<p>No projects are registered.</p>"
+
+    metrics = "".join([
+        _metric("Active projects", portfolio.get("active_projects", 0)),
+        _metric("Ready actions", portfolio.get("ready_actions", 0)),
+        _metric("In flight", portfolio.get("in_flight", 0)),
+        _metric("Verification", portfolio.get("pending_verification", 0)),
+        _metric("Exceptions", portfolio.get("open_exceptions", 0)),
+        _metric("Principal decisions", portfolio.get("principal_decisions", 0)),
+    ])
+    telemetry_metrics = "".join([
+        _metric("Claims", telemetry.get("claims", 0)),
+        _metric("Completed transitions", telemetry.get("completed_transitions", 0)),
+        _metric("Recoveries", telemetry.get("recoveries", 0)),
+        _metric("Worker failures", telemetry.get("worker_failures", 0)),
+        _metric("Hook failures", telemetry.get("hook_failures", 0)),
+    ])
+
     return f"""<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Lattice Control Plane</title><style>
-:root{{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#111;color:#eee}}*{{box-sizing:border-box}}body{{margin:0;background:#111;color:#eee}}main{{max-width:1180px;margin:auto;padding:40px 24px 80px}}h1{{font-size:clamp(2rem,5vw,4.5rem);letter-spacing:-.06em;margin:.1em 0}}.lede,.detail{{color:#aaa;line-height:1.5}}.top{{display:flex;justify-content:space-between;gap:24px;align-items:flex-end;margin-bottom:36px}}.revision,code{{font-family:ui-monospace,monospace;color:#999}}.principal{{border:1px solid #5b4730;background:#19150f;border-radius:12px;padding:20px;margin:0 0 48px}}.principal h2{{font-size:1.2rem;margin:0}}.principal header{{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:8px}}.principal .count{{font-family:ui-monospace,monospace;color:#c7a36f}}.project{{border-top:1px solid #444;padding:28px 0 36px}}.project header{{display:flex;justify-content:space-between;gap:20px}}h2{{font-size:2rem;margin:0}}.eyebrow{{text-transform:uppercase;font-size:.7rem;letter-spacing:.14em;color:#999;margin:0 0 7px}}.current{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:28px 0}}.current div,article{{background:#181818;border:1px solid #2b2b2b;border-radius:10px;padding:18px}}.current span{{display:block;color:#888;font-size:.75rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:7px}}.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}}.evidence-grid{{display:grid;grid-template-columns:1fr 2fr;gap:12px;margin-top:12px}}article{{min-height:180px}}h3{{margin:0 0 14px;font-size:.9rem;text-transform:uppercase;letter-spacing:.08em;color:#aaa;display:flex;justify-content:space-between}}ul{{list-style:none;padding:0;margin:0}}li{{padding:10px 0;border-top:1px solid #2b2b2b}}li:first-child{{border-top:0}}li strong,li span{{display:block}}li span{{font-size:.78rem;color:#888;margin-top:4px}}.empty{{color:#777}}.exceptions{{border-color:#473333}}@media(max-width:850px){{.grid{{grid-template-columns:1fr 1fr}}.evidence-grid{{grid-template-columns:1fr}}}}@media(max-width:560px){{main{{padding:24px 16px 56px}}.top{{display:block}}.current,.grid{{grid-template-columns:1fr}}}}
-</style></head><body><main><div class='top'><div><p class='eyebrow'>Local control surface</p><h1>Lattice</h1><p class='lede'>Current project state, derived work, verification, evidence, and exceptions. This surface is read-only; authority remains in the guarded state engine.</p></div><div class='revision'>revision {model['revision']}</div></div><section class='principal'><header><div><p class='eyebrow'>Human decision boundary</p><h2>Principal inbox</h2></div><div class='count'>{inbox['count']} open · {inbox['blocking_count']} blocking</div></header><ul>{inbox_rows}</ul></section>{body}</main></body></html>"""
+:root{{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#111;color:#eee}}*{{box-sizing:border-box}}body{{margin:0;background:#111;color:#eee}}main{{max-width:1220px;margin:auto;padding:40px 24px 80px}}h1{{font-size:clamp(2rem,5vw,4.5rem);letter-spacing:-.06em;margin:.1em 0}}.lede,.detail{{color:#aaa;line-height:1.5}}.top{{display:flex;justify-content:space-between;gap:24px;align-items:flex-end;margin-bottom:24px}}.revision,code{{font-family:ui-monospace,monospace;color:#999}}.system{{text-align:right}}.backend{{display:inline-block;border:1px solid #3b4a5b;background:#121820;border-radius:999px;padding:6px 10px;color:#9fb6cc;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}}.metrics{{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:0 0 28px}}.metric{{background:#181818;border:1px solid #2b2b2b;border-radius:9px;padding:14px}}.metric span,.project-meta span{{display:block;color:#888;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em}}.metric strong{{display:block;font-size:1.45rem;margin-top:5px}}.principal{{border:1px solid #5b4730;background:#19150f;border-radius:12px;padding:20px;margin:0 0 20px}}.principal h2{{font-size:1.2rem;margin:0}}.principal header,.section-head{{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:8px}}.principal .count{{font-family:ui-monospace,monospace;color:#c7a36f}}.activity{{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:44px}}.activity>article{{min-height:0}}.project{{border-top:1px solid #444;padding:28px 0 36px}}.project header{{display:flex;justify-content:space-between;gap:20px}}.project-meta{{text-align:right}}h2{{font-size:2rem;margin:0}}.eyebrow{{text-transform:uppercase;font-size:.7rem;letter-spacing:.14em;color:#999;margin:0 0 7px}}.current{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:28px 0}}.current div,article{{background:#181818;border:1px solid #2b2b2b;border-radius:10px;padding:18px}}.current span{{display:block;color:#888;font-size:.75rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:7px}}.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}}.evidence-grid{{display:grid;grid-template-columns:1fr 2fr;gap:12px;margin-top:12px}}article{{min-height:180px}}h3{{margin:0 0 14px;font-size:.9rem;text-transform:uppercase;letter-spacing:.08em;color:#aaa;display:flex;justify-content:space-between}}.subhead{{margin-top:22px}}ul{{list-style:none;padding:0;margin:0}}li{{padding:10px 0;border-top:1px solid #2b2b2b}}li:first-child{{border-top:0}}li strong,li span{{display:block}}li span{{font-size:.78rem;color:#888;margin-top:4px}}.empty{{color:#777}}.exceptions{{border-color:#473333}}@media(max-width:950px){{.metrics{{grid-template-columns:repeat(3,1fr)}}.grid{{grid-template-columns:1fr 1fr}}.evidence-grid,.activity{{grid-template-columns:1fr}}}}@media(max-width:560px){{main{{padding:24px 16px 56px}}.top{{display:block}}.system{{text-align:left;margin-top:16px}}.metrics{{grid-template-columns:1fr 1fr}}.current,.grid{{grid-template-columns:1fr}}}}
+</style></head><body><main><div class='top'><div><p class='eyebrow'>Human supervision</p><h1>Lattice</h1><p class='lede'>What the agency is doing, what changed, and where human authority is required. This surface is read-only; authority remains in the guarded state engine.</p></div><div class='system'><span class='backend'>{html.escape(backend)} state</span><div class='revision'>revision {model['revision']} · event {model['event_sequence']}</div></div></div><div class='metrics'>{metrics}</div><section class='principal'><header><div><p class='eyebrow'>Human decision boundary</p><h2>Principal inbox</h2></div><div class='count'>{inbox['count']} open · {inbox['blocking_count']} blocking</div></header><ul>{inbox_rows}</ul></section><section class='activity'><article><h3>Recent accepted changes <b>{len(changes)}</b></h3><ul>{change_rows}</ul></article><article><h3>Operational telemetry</h3><div class='telemetry'>{telemetry_metrics}</div></article></section>{body}</main></body></html>"""
 
 
 class ControlHandler(BaseHTTPRequestHandler):
-    server_version = "LatticeControl/0.0.6"
+    server_version = "LatticeControl/0.0.7"
 
     def _model(self) -> dict:
         query = parse_qs(urlparse(self.path).query)
         project_id = query.get("project", [None])[0]
-        with StateStore(ROOT) as store:
-            model = read_model(store, project_id, 5)
-            model["principal_inbox"] = principal_inbox(store, project_id)
-            return model
+        with open_state_store(ROOT) as store:
+            return supervision_model(store, project_id, 5)
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
@@ -104,7 +152,7 @@ class ControlHandler(BaseHTTPRequestHandler):
 
 
 def main() -> int:
-    parser=argparse.ArgumentParser(description="Serve Lattice's local read-only control surface."); parser.add_argument("--host", default="127.0.0.1"); parser.add_argument("--port", type=int, default=8765); args=parser.parse_args()
+    parser=argparse.ArgumentParser(description="Serve Lattice's local read-only control surface over the configured state backend."); parser.add_argument("--host", default="127.0.0.1"); parser.add_argument("--port", type=int, default=8765); args=parser.parse_args()
     server=ThreadingHTTPServer((args.host,args.port),ControlHandler); print(f"Lattice control surface: http://{args.host}:{args.port}")
     try: server.serve_forever()
     except KeyboardInterrupt: pass
