@@ -21,6 +21,8 @@
 - Recover expired leases with their recorded host/workspace provenance and automatically record `workspace_abandoned` when the vanished host did not report abandonment itself.
 - Bracket hosted completion with a durable `completion_started` marker and reconcile a missing final lifecycle event from the matching committed semantic transition after process loss.
 - Reject changed completion intent and stale post-expiry replay rather than guessing after interruption.
+- Added a host-neutral `lattice-execution` Agent Skill under `.agents/skills` so execution technique can be loaded selectively without becoming a second authority system.
+- Added a GitHub hosted-agent adapter that uses canonical root `AGENTS.md`, the shared execution skill, and the same versioned host-adapter envelopes as other runtimes.
 - Added the first dependency-free local control surface and `/api/state` projection.
 - Removed legacy process-backlog artifacts and restored a clean neutral seed contract.
 - Added release-version consistency checks so future PRs cannot land with stale README or seed metadata.
