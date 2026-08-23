@@ -11,12 +11,14 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from hooks import dispatch_hooks
 from state_engine import LatticeError, StateStore, utc_now
 
 
 ROOT = Path(__file__).resolve().parents[1]
 LIFECYCLE_EVENTS = {
     "action_claimed",
+    "claim_aborted",
     "workspace_created",
     "workspace_abandoned",
     "policy_checked",
@@ -24,6 +26,14 @@ LIFECYCLE_EVENTS = {
     "worker_timed_out",
     "lease_expired",
     "recovery_completed",
+    "hook_failed",
+}
+INTERNAL_LIFECYCLE_EVENTS = {
+    "action_claimed",
+    "claim_aborted",
+    "lease_expired",
+    "recovery_completed",
+    "hook_failed",
 }
 
 
@@ -34,6 +44,11 @@ def _decode(value: str | None, fallback: Any) -> Any:
         return json.loads(value)
     except json.JSONDecodeError:
         return fallback
+
+
+def _event_sequence(store: StateStore) -> int:
+    row = store.conn.execute("SELECT COALESCE(MAX(id), 0) FROM events").fetchone()
+    return int(row[0])
 
 
 def record_lifecycle_event(
@@ -47,8 +62,9 @@ def record_lifecycle_event(
     host: str | None = None,
     workspace_id: str | None = None,
     payload: dict[str, Any] | None = None,
+    run_hooks: bool = True,
 ) -> dict[str, Any]:
-    """Persist a host/runtime event without allowing it to rewrite project truth."""
+    """Persist operational telemetry without advancing semantic project revision."""
     if event_type not in LIFECYCLE_EVENTS:
         raise LatticeError("Unsupported lifecycle event: " + event_type)
     store._require_project(project_id)
@@ -57,10 +73,11 @@ def record_lifecycle_event(
         event_payload["host"] = host
     if workspace_id:
         event_payload["workspace_id"] = workspace_id
+
+    semantic_revision = store.project_revision(project_id)
     with store.conn:
-        revision = store._bump_revision()
         store._event(
-            revision,
+            semantic_revision,
             project_id,
             event_type,
             entity_type,
@@ -68,26 +85,50 @@ def record_lifecycle_event(
             role,
             event_payload,
         )
+        event_id = int(store.conn.execute("SELECT last_insert_rowid()").fetchone()[0])
     store.export_snapshot()
-    return {
-        "revision": revision,
+
+    result = {
+        "event_id": event_id,
+        "revision": semantic_revision,
+        "semantic_revision": semantic_revision,
         "project_id": project_id,
         "event_type": event_type,
         "entity_type": entity_type,
         "entity_id": entity_id,
         "payload": event_payload,
     }
+    if not run_hooks:
+        result["hooks"] = []
+        return result
+
+    try:
+        result["hooks"] = dispatch_hooks(store.root, event_type, result)
+    except LatticeError as error:
+        record_lifecycle_event(
+            store,
+            project_id=project_id,
+            event_type="hook_failed",
+            entity_type="lifecycle_event",
+            entity_id=str(event_id),
+            role="runtime",
+            host=host,
+            workspace_id=workspace_id,
+            payload={
+                "failed_event_type": event_type,
+                "failed_event_id": event_id,
+                "error": str(error),
+            },
+            run_hooks=False,
+        )
+        raise
+    return result
 
 
-def recover_expired_leases(
-    store: StateStore,
-    project_id: str | None = None,
-) -> dict[str, Any]:
-    """Remove expired leases, retain an audit event, and recompute affected frontiers."""
+def recover_expired_leases(store: StateStore, project_id: str | None = None) -> dict[str, Any]:
     now = utc_now()
-    parameters: tuple[Any, ...]
     where = "expires_at <= ?"
-    parameters = (now,)
+    parameters: tuple[Any, ...] = (now,)
     if project_id:
         store._require_project(project_id)
         where += " AND project_id = ?"
@@ -100,48 +141,106 @@ def recover_expired_leases(
         ).fetchall()
     ]
     if not expired:
-        return {"recovered": 0, "leases": [], "frontiers": {}}
+        return {"recovered": 0, "leases": [], "frontiers": {}, "hook_results": []}
 
     by_project: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    envelopes: list[dict[str, Any]] = []
     with store.conn:
         for lease in expired:
             by_project[lease["project_id"]].append(lease)
             store.conn.execute("DELETE FROM leases WHERE id = ?", (lease["id"],))
-            revision = store._bump_revision()
+            semantic_revision = store.project_revision(lease["project_id"])
+            payload = {
+                "action_key": lease["action_key"],
+                "action_kind": lease["action_kind"],
+                "target_id": lease["target_id"],
+                "leased_by": lease["leased_by"],
+                "expires_at": lease["expires_at"],
+            }
             store._event(
-                revision,
+                semantic_revision,
                 lease["project_id"],
                 "lease_expired",
                 "lease",
                 lease["id"],
                 "runtime",
+                payload,
+            )
+            event_id = int(store.conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+            envelopes.append(
                 {
-                    "action_key": lease["action_key"],
-                    "action_kind": lease["action_kind"],
-                    "target_id": lease["target_id"],
-                    "leased_by": lease["leased_by"],
-                    "expires_at": lease["expires_at"],
-                },
+                    "event_id": event_id,
+                    "revision": semantic_revision,
+                    "semantic_revision": semantic_revision,
+                    "project_id": lease["project_id"],
+                    "event_type": "lease_expired",
+                    "entity_type": "lease",
+                    "entity_id": lease["id"],
+                    "payload": payload,
+                }
             )
         for affected_project, leases in by_project.items():
-            revision = store._bump_revision()
+            semantic_revision = store.project_revision(affected_project)
+            payload = {"expired_lease_ids": [lease["id"] for lease in leases]}
             store._event(
-                revision,
+                semantic_revision,
                 affected_project,
                 "recovery_completed",
                 "project",
                 affected_project,
                 "runtime",
-                {"expired_lease_ids": [lease["id"] for lease in leases]},
+                payload,
+            )
+            event_id = int(store.conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+            envelopes.append(
+                {
+                    "event_id": event_id,
+                    "revision": semantic_revision,
+                    "semantic_revision": semantic_revision,
+                    "project_id": affected_project,
+                    "event_type": "recovery_completed",
+                    "entity_type": "project",
+                    "entity_id": affected_project,
+                    "payload": payload,
+                }
             )
     store.export_snapshot()
+
+    hook_results = []
+    for envelope in envelopes:
+        try:
+            results = dispatch_hooks(store.root, envelope["event_type"], envelope)
+        except LatticeError as error:
+            record_lifecycle_event(
+                store,
+                project_id=envelope["project_id"],
+                event_type="hook_failed",
+                entity_type="lifecycle_event",
+                entity_id=str(envelope["event_id"]),
+                role="runtime",
+                payload={
+                    "failed_event_type": envelope["event_type"],
+                    "failed_event_id": envelope["event_id"],
+                    "error": str(error),
+                },
+                run_hooks=False,
+            )
+            raise
+        hook_results.append(
+            {
+                "event_type": envelope["event_type"],
+                "entity_id": envelope["entity_id"],
+                "results": results,
+            }
+        )
+
     return {
         "recovered": len(expired),
         "leases": expired,
         "frontiers": {
-            affected_project: store.frontier(affected_project, limit=10)
-            for affected_project in sorted(by_project)
+            pid: store.frontier(pid, limit=10) for pid in sorted(by_project)
         },
+        "hook_results": hook_results,
     }
 
 
@@ -156,32 +255,57 @@ def claim_for_host(
     action_key: str | None = None,
     ttl_minutes: int | None = None,
 ) -> dict[str, Any]:
-    """Recover stale work, claim one derived action, and persist the runtime boundary event."""
     recovery = recover_expired_leases(store, project_id)
     claimed = store.claim(project_id, role, actor, action_key, ttl_minutes)
-    event = record_lifecycle_event(
-        store,
-        project_id=project_id,
-        event_type="action_claimed",
-        entity_type="lease",
-        entity_id=claimed["lease_id"],
-        role=role,
-        host=host,
-        workspace_id=workspace_id,
-        payload={
-            "actor": actor,
-            "action_key": claimed["action"]["action_key"],
-            "action_kind": claimed["action"]["kind"],
-            "target_id": claimed["action"]["target_id"],
-            "expires_at": claimed["expires_at"],
-        },
-    )
-    claimed["control_revision"] = event["revision"]
+    try:
+        event = record_lifecycle_event(
+            store,
+            project_id=project_id,
+            event_type="action_claimed",
+            entity_type="lease",
+            entity_id=claimed["lease_id"],
+            role=role,
+            host=host,
+            workspace_id=workspace_id,
+            payload={
+                "actor": actor,
+                "action_key": claimed["action"]["action_key"],
+                "action_kind": claimed["action"]["kind"],
+                "target_id": claimed["action"]["target_id"],
+                "expires_at": claimed["expires_at"],
+            },
+        )
+    except LatticeError as error:
+        store.release_lease(claimed["lease_id"], role)
+        record_lifecycle_event(
+            store,
+            project_id=project_id,
+            event_type="claim_aborted",
+            entity_type="lease",
+            entity_id=claimed["lease_id"],
+            role="runtime",
+            host=host,
+            workspace_id=workspace_id,
+            payload={
+                "actor": actor,
+                "action_key": claimed["action"]["action_key"],
+                "reason": "post-claim hook failed",
+                "error": str(error),
+            },
+            run_hooks=False,
+        )
+        raise
+
+    claimed["control_event_id"] = event["event_id"]
+    claimed["control_revision"] = event["semantic_revision"]
     claimed["recovery"] = {"recovered": recovery["recovered"]}
+    claimed["hooks"] = event["hooks"]
     return claimed
 
 
-def _project_read_model(store: StateStore, project: sqlite3.Row, frontier_limit: int) -> dict[str, Any]:
+def _project_read_model(
+    store: StateStore, project: sqlite3.Row, frontier_limit: int
+) -> dict[str, Any]:
     project_id = project["id"]
     objective = store.conn.execute(
         "SELECT * FROM objectives WHERE project_id = ? AND status = 'active'",
@@ -202,8 +326,7 @@ def _project_read_model(store: StateStore, project: sqlite3.Row, frontier_limit:
         dict(row)
         for row in store.conn.execute(
             """SELECT s.id AS submission_id, s.summary, s.created_at,
-                      c.id AS condition_id, c.key AS condition_key, c.title,
-                      c.verifier_role
+                      c.id AS condition_id, c.key AS condition_key, c.title, c.verifier_role
                FROM submissions s
                JOIN conditions c ON c.id = s.condition_id
                WHERE c.project_id = ? AND s.status = 'pending' AND c.status = 'candidate'
@@ -237,10 +360,10 @@ def _project_read_model(store: StateStore, project: sqlite3.Row, frontier_limit:
     ]
     events = []
     for row in store.conn.execute(
-        """SELECT revision, event_type, entity_type, entity_id, role,
+        """SELECT id, revision, event_type, entity_type, entity_id, role,
                   payload_json, created_at
            FROM events WHERE project_id = ?
-           ORDER BY revision DESC, id DESC LIMIT 12""",
+           ORDER BY id DESC LIMIT 12""",
         (project_id,),
     ).fetchall():
         item = dict(row)
@@ -248,6 +371,7 @@ def _project_read_model(store: StateStore, project: sqlite3.Row, frontier_limit:
         events.append(item)
     return {
         "project": dict(project),
+        "semantic_revision": store.project_revision(project_id),
         "objective": dict(objective) if objective else None,
         "milestone": dict(milestone) if milestone else None,
         "frontier": store.frontier(project_id, limit=frontier_limit),
@@ -260,25 +384,28 @@ def _project_read_model(store: StateStore, project: sqlite3.Row, frontier_limit:
 
 
 def read_model(
-    store: StateStore,
-    project_id: str | None = None,
-    frontier_limit: int = 5,
+    store: StateStore, project_id: str | None = None, frontier_limit: int = 5
 ) -> dict[str, Any]:
-    """Return the stable control-surface projection without mutating state."""
     if frontier_limit < 1:
         raise LatticeError("frontier_limit must be at least 1")
-    if project_id:
-        projects = [store._require_project(project_id)]
-    else:
-        projects = store.conn.execute(
-            "SELECT * FROM projects ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END, created_at, id"
+    projects = (
+        [store._require_project(project_id)]
+        if project_id
+        else store.conn.execute(
+            """SELECT * FROM projects
+               ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END,
+               created_at, id"""
         ).fetchall()
+    )
     return {
         "format": "lattice-control-read-model",
         "version": 1,
         "generated_at": utc_now(),
         "revision": store.revision,
-        "projects": [_project_read_model(store, project, frontier_limit) for project in projects],
+        "event_sequence": _event_sequence(store),
+        "projects": [
+            _project_read_model(store, project, frontier_limit) for project in projects
+        ],
     }
 
 
@@ -287,7 +414,9 @@ def emit(value: Any) -> None:
 
 
 def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser(description="Operate Lattice's host-neutral control plane.")
+    result = argparse.ArgumentParser(
+        description="Operate Lattice's host-neutral control plane."
+    )
     commands = result.add_subparsers(dest="command", required=True)
 
     inspect = commands.add_parser("inspect")
@@ -308,14 +437,17 @@ def parser() -> argparse.ArgumentParser:
 
     event = commands.add_parser("event")
     event.add_argument("--project", required=True)
-    event.add_argument("--event-type", required=True, choices=sorted(LIFECYCLE_EVENTS - {"action_claimed", "lease_expired", "recovery_completed"}))
+    event.add_argument(
+        "--event-type",
+        required=True,
+        choices=sorted(LIFECYCLE_EVENTS - INTERNAL_LIFECYCLE_EVENTS),
+    )
     event.add_argument("--entity-type", required=True)
     event.add_argument("--entity-id", required=True)
     event.add_argument("--role", default="runtime")
     event.add_argument("--host")
     event.add_argument("--workspace")
     event.add_argument("--payload-json")
-
     return result
 
 
