@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -110,7 +111,7 @@ class PostgresStateStoreTest(unittest.TestCase):
                 "All conditions accepted",
             )
             self.assertEqual(advanced["result"]["accepted_milestone"], "milestone-pg")
-            snapshot = store.export_snapshot()
+            snapshot = store.export_snapshot(self.snapshot)
             max_event_id = max(row["id"] for row in snapshot["tables"]["events"])
         finally:
             store.close()
@@ -123,12 +124,49 @@ class PostgresStateStoreTest(unittest.TestCase):
             newest = restored.conn.execute("SELECT MAX(id) FROM events").fetchone()[0]
             self.assertGreater(newest, max_event_id)
             round_trip = restored.export_snapshot()
-            self.assertEqual(
-                round_trip["tables"]["conditions"][0]["status"],
-                "satisfied",
-            )
+            self.assertEqual(round_trip["tables"]["conditions"][0]["status"], "satisfied")
         finally:
             restored.close()
+
+    def test_live_shared_store_does_not_rewind_from_stale_repository_snapshot(self) -> None:
+        live = PostgresStateStore(ROOT, self.connect(), snapshot_path=self.snapshot)
+        try:
+            live.ensure_project("project-live", "Live Project")
+            live.export_snapshot(self.snapshot)
+            live.ensure_project("project-newer", "Newer Project")
+            self.assertEqual(
+                int(live.conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0]),
+                2,
+            )
+        finally:
+            live.close()
+
+        # The checkpoint intentionally contains only project-live. Reconnecting must
+        # not treat that older file as permission to overwrite the shared database.
+        reopened = PostgresStateStore(ROOT, self.connect(), snapshot_path=self.snapshot)
+        try:
+            self.assertEqual(reopened._require_project("project-newer")["name"], "Newer Project")
+            self.assertEqual(
+                int(reopened.conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0]),
+                2,
+            )
+        finally:
+            reopened.close()
+
+    def test_implicit_mutation_exports_do_not_publish_checkpoint_file(self) -> None:
+        store = PostgresStateStore(ROOT, self.connect(), snapshot_path=self.snapshot)
+        try:
+            store.ensure_project("project-shared", "Shared Project")
+            self.assertFalse(self.snapshot.exists())
+            projection = store.export_snapshot()
+            self.assertEqual(projection["tables"]["projects"][0]["id"], "project-shared")
+            self.assertFalse(self.snapshot.exists())
+            store.export_snapshot(self.snapshot)
+            self.assertTrue(self.snapshot.exists())
+            written = json.loads(self.snapshot.read_text(encoding="utf-8"))
+            self.assertEqual(written["tables"]["projects"][0]["id"], "project-shared")
+        finally:
+            store.close()
 
 
 if __name__ == "__main__":
