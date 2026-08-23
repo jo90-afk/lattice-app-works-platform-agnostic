@@ -2,83 +2,91 @@
 
 Lattice treats coding agents and hosted runtimes as replaceable execution hosts. The host adapter is the boundary between those runtimes and Lattice's durable project state.
 
-The first adapter implementation is intentionally small. It does not ask a host to understand Lattice's internal tables, and it does not let a host write durable truth directly.
+Hosts do not need to understand Lattice's internal tables and do not receive direct write authority over durable truth. They exchange one versioned envelope with `scripts/host_adapter.py`; that router delegates to the same guarded state and lifecycle transitions used by the local CLI.
 
-## Boundary
+The machine-readable contract is `runtime/host-adapter.schema.json`.
 
-A host may:
+## Operations
 
-- inspect the control-plane read model;
-- claim one action already derived by the active frontier;
-- attach host and workspace identity to the runtime event stream;
-- report lifecycle events such as workspace creation, policy checks, worker failure, or abandonment;
-- request recovery of expired leases.
+The v1 envelope supports five operations:
 
-A host may not:
+- `claim` — claim one action already derived by the active frontier;
+- `complete` — complete the leased action through a guarded release, submit, fail, review, milestone acceptance, commitment fulfillment, or exception resolution transition;
+- `event` — append an allowed external runtime event;
+- `inspect` — read the control model globally or for one project;
+- `recover` — recover expired leases globally or for one project.
 
-- insert or edit truths, records, conditions, reviews, commitments, or exceptions by writing the database;
-- bypass role and WIP constraints when claiming an action;
-- advance a milestone without the existing Assurance transition;
-- treat lifecycle telemetry as project truth.
+Only `format`, `version`, and `operation` are universally required. `inspect` and `recover` may therefore operate globally without inventing a project or host identity. Claim, completion, and external event envelopes have operation-specific requirements.
 
-The machine-readable envelope is in `runtime/host-adapter.schema.json`.
+## Execute one envelope
 
-## Control read model
-
-The control-plane projection is read-only and stable enough for a CLI, local UI, or remote coordinator to consume. It contains, per project:
-
-- active objective and milestone;
-- currently derived frontier;
-- active leases;
-- pending verification;
-- open exceptions;
-- truths currently demanding frontier attention;
-- recent durable events.
-
-Inspect all projects:
+Pass a JSON file:
 
 ```bash
-python3 scripts/control_plane.py inspect
+python3 scripts/host_adapter.py --file envelope.json
 ```
 
-Inspect one project:
+Or stream an envelope on stdin:
 
 ```bash
-python3 scripts/control_plane.py inspect --project first-project
+cat envelope.json | python3 scripts/host_adapter.py
 ```
 
-Reading this projection does not mutate state.
+Every operation either returns JSON or exits nonzero with a guarded rejection.
 
-## Claim through a host
+## Claim
 
-A host claim first recovers expired leases for the project, then delegates to the existing guarded `StateStore.claim` transition. The adapter records an `action_claimed` event with host/workspace metadata after the lease is created.
-
-```bash
-python3 scripts/control_plane.py claim \
-  --project first-project \
-  --role application \
-  --actor worker-1 \
-  --host codex \
-  --workspace codex-worktree-42
+```json
+{
+  "format": "lattice-host-adapter",
+  "version": 1,
+  "operation": "claim",
+  "project_id": "first-project",
+  "host": "codex",
+  "workspace_id": "worktree-42",
+  "actor": "worker-1",
+  "role": "application"
+}
 ```
 
-The returned action remains the bounded execution brief produced by the active frontier. Host metadata does not enter the brief unless a later policy explicitly requires it.
+Claim first recovers expired leases for the project, then delegates to the normal guarded claim transition. The returned action is the bounded execution brief produced by the active frontier. `action_claimed` records host/workspace provenance without advancing semantic project revision.
 
-## Lifecycle events
+## Complete
 
-Hosts can append runtime events without changing project truth:
+A completion envelope names the existing lease and one guarded outcome:
 
-```bash
-python3 scripts/control_plane.py event \
-  --project first-project \
-  --event-type workspace_created \
-  --entity-type workspace \
-  --entity-id codex-worktree-42 \
-  --host codex \
-  --workspace codex-worktree-42
+```json
+{
+  "format": "lattice-host-adapter",
+  "version": 1,
+  "operation": "complete",
+  "project_id": "first-project",
+  "host": "codex",
+  "lease_id": "lease-abc123",
+  "role": "application",
+  "outcome": {
+    "type": "submit",
+    "summary": "Increment implemented",
+    "artifact_refs": ["projects/first-project/platform/result.txt"]
+  }
+}
 ```
 
-Supported external events in this first slice are:
+The router verifies that project and role match the lease before performing the transition. Supported outcome types are:
+
+- `release`
+- `submit`
+- `fail`
+- `review`
+- `advance`
+- `commitment_fulfill`
+- `exception_resolve`
+
+Completion uses `scripts/lifecycle.py`, so local CLI and hosted execution share the same state mutation and post-transition telemetry semantics.
+
+## External runtime events
+
+Hosts may report only operational events that do not assert governed project truth:
 
 - `workspace_created`
 - `workspace_abandoned`
@@ -86,38 +94,53 @@ Supported external events in this first slice are:
 - `worker_failed`
 - `worker_timed_out`
 
-The adapter itself owns `action_claimed`, `lease_expired`, and `recovery_completed` so a host cannot forge those transitions through the CLI.
-
-## Recovery
-
-Leases remain intentionally ephemeral and excluded from the portable snapshot. If a worker disappears while its local runtime database survives, an expired lease can be reclaimed without reconstructing intent from a conversation log.
-
-```bash
-python3 scripts/control_plane.py recover --project first-project
+```json
+{
+  "format": "lattice-host-adapter",
+  "version": 1,
+  "operation": "event",
+  "project_id": "first-project",
+  "host": "codex",
+  "workspace_id": "worktree-42",
+  "event_type": "workspace_created",
+  "entity_type": "workspace",
+  "entity_id": "worktree-42",
+  "payload": {}
+}
 ```
 
-Recovery:
+Adapter-owned events such as `action_claimed`, lease recovery, hook failure, and completion telemetry cannot be forged through the external event operation.
 
-1. finds expired leases;
-2. removes them from operational state;
-3. records one durable `lease_expired` event per lease;
-4. records `recovery_completed` for each affected project;
-5. recomputes the active frontier.
+## Inspect
 
-The original action returns to the frontier only if the durable project state still makes it ready. If another state transition has made the action stale, it does not reappear.
+Global inspection needs no project or host:
 
-## Why runtime events are durable
+```json
+{
+  "format": "lattice-host-adapter",
+  "version": 1,
+  "operation": "inspect"
+}
+```
 
-The lease itself is not project truth. The fact that an agent attempted work, disappeared, or required recovery can still be useful operational evidence. Lattice therefore persists lifecycle events while keeping leases out of the portable snapshot.
+Add `project_id` to scope the projection or `frontier_limit` to change the number of derived actions returned per project. Inspection does not mutate state.
 
-This separation is deliberate: execution hosts can come and go without becoming a second authority over the project model.
+## Recover
 
-## Next implementation slice
+Global recovery also needs no artificial host or project identity:
 
-This adapter is the foundation for the rest of 0.0.5. The next work should:
+```json
+{
+  "format": "lattice-host-adapter",
+  "version": 1,
+  "operation": "recover"
+}
+```
 
-- route the main `scripts/lattice.py claim` path through the adapter so recovery is universal rather than opt-in;
-- add submit/fail/release lifecycle boundaries where they improve recovery and observability;
-- add deterministic hook dispatch around adapter events;
-- make host adapters invokable through one envelope rather than only CLI flags;
-- expose the read model through the first local human control surface.
+With `project_id`, recovery is scoped to that project. Recovery removes expired leases, records durable operational evidence, and recomputes the frontier. An action reappears only if current durable state still makes it ready.
+
+## Authority boundary
+
+A host may inspect, claim, complete its leased work through guarded outcomes, report allowed runtime events, and request recovery. It may not directly insert or edit truths, records, conditions, reviews, milestones, commitments, or exceptions; bypass role/WIP guards; forge adapter-owned events; or treat lifecycle telemetry as project truth.
+
+The lease remains ephemeral. Operational attempts and recovery events are durable because they are useful supervision evidence. Semantic project revision and event sequence remain separate so runtime observation cannot stale otherwise-current hosted work.
