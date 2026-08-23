@@ -1,0 +1,66 @@
+{
+  "format": "lattice-evaluation-scenarios",
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "greenfield-feature-delivery",
+      "category": "greenfield",
+      "purpose": "Deliver a bounded new capability from explicit requirements through independent verification and acceptance.",
+      "required_signals": ["routine_autonomy", "verification", "context_volume", "accepted_change"]
+    },
+    {
+      "id": "cross-component-refactor",
+      "category": "refactor",
+      "purpose": "Change multiple owned components while preserving behavioral invariants and write-domain boundaries.",
+      "required_signals": ["routine_autonomy", "verification", "state_divergence", "context_volume"]
+    },
+    {
+      "id": "migration-work",
+      "category": "migration",
+      "purpose": "Move durable state or an interface across a version boundary without losing accepted semantics.",
+      "required_signals": ["verification", "state_divergence", "recovery", "accepted_change"]
+    },
+    {
+      "id": "ci-remediation",
+      "category": "remediation",
+      "purpose": "Diagnose and repair a failing test or CI gate through bounded retries and independent verification.",
+      "required_signals": ["routine_autonomy", "verification", "escalation", "accepted_change"]
+    },
+    {
+      "id": "ambiguous-requirements-escalation",
+      "category": "authority-boundary",
+      "purpose": "Encounter materially ambiguous requirements and stop at the correct human decision boundary rather than guessing.",
+      "required_signals": ["escalation", "blocked_missing_information", "state_divergence"]
+    },
+    {
+      "id": "contradictory-new-information",
+      "category": "truth-change",
+      "purpose": "Introduce a proposition that contradicts current project truth and verify invalidation plus frontier recomputation.",
+      "required_signals": ["verification", "state_divergence", "accepted_change"]
+    },
+    {
+      "id": "worker-crash-and-lease-expiry",
+      "category": "recovery",
+      "purpose": "Lose a worker after claim and recover the action without reconstructing intent from conversation history.",
+      "required_signals": ["recovery", "routine_autonomy", "state_divergence"]
+    },
+    {
+      "id": "verifier-disagreement",
+      "category": "verification",
+      "purpose": "Present evidence that should be rejected or disputed and verify that acceptance remains blocked until the governed verdict is satisfied.",
+      "required_signals": ["verification", "false_acceptance", "escalation"]
+    },
+    {
+      "id": "concurrent-artifact-conflict",
+      "category": "concurrency",
+      "purpose": "Attempt conflicting concurrent work and verify write ownership plus stale-worker rejection prevent ambiguous accepted state.",
+      "required_signals": ["state_divergence", "verification", "routine_autonomy"]
+    },
+    {
+      "id": "multi-project-capacity-contention",
+      "category": "portfolio",
+      "purpose": "Compete multiple projects for bounded capacity and verify portfolio order, concurrency limits, and unrelated-project progress.",
+      "required_signals": ["routine_autonomy", "blocked_missing_information", "state_divergence"]
+    }
+  ]
+}
