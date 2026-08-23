@@ -52,6 +52,8 @@ class LifecycleTest(unittest.TestCase):
         )
         self.assertEqual(submitted["result"]["status"], "pending")
         self.assertEqual(submitted["lifecycle"]["event_type"], "action_submitted")
+        self.assertEqual(submitted["state_backend"], "sqlite")
+        self.assertEqual(submitted["lifecycle"]["payload"]["state_backend"], "sqlite")
 
         review_claim = self.store.claim("project-001", "quality", "verifier")
         reviewed = review_action(
@@ -59,15 +61,15 @@ class LifecycleTest(unittest.TestCase):
         )
         self.assertEqual(reviewed["result"]["condition"]["status"], "satisfied")
         self.assertEqual(reviewed["lifecycle"]["event_type"], "verification_recorded")
+        self.assertEqual(reviewed["state_backend"], "sqlite")
 
         advance_claim = self.store.claim("project-001", "assurance", "assurance")
         advanced = advance_action(
             self.store, advance_claim["lease_id"], "assurance", "All conditions accepted"
         )
         self.assertEqual(advanced["result"]["accepted_milestone"], "milestone-001")
-        self.assertEqual(
-            advanced["lifecycle"]["event_type"], "milestone_acceptance_recorded"
-        )
+        self.assertEqual(advanced["lifecycle"]["event_type"], "milestone_acceptance_recorded")
+        self.assertEqual(advanced["state_backend"], "sqlite")
         self.assertIn("action_submitted", self.event_types())
         self.assertIn("verification_recorded", self.event_types())
         self.assertIn("milestone_acceptance_recorded", self.event_types())
@@ -77,6 +79,8 @@ class LifecycleTest(unittest.TestCase):
         claim = self.store.claim("project-001", "application", "builder")
         result = release_action(self.store, claim["lease_id"], "application")
         self.assertEqual(result["released"], claim["lease_id"])
+        self.assertEqual(result["state_backend"], "sqlite")
+        self.assertEqual(result["lifecycle"]["payload"]["state_backend"], "sqlite")
         self.assertEqual(self.store.project_revision("project-001"), before)
         frontier = self.store.frontier("project-001", "application", 3)
         self.assertEqual(frontier[0]["target_id"], "condition-001")

@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from hooks import dispatch_hooks
+from state_backend import backend_for_store
 from state_engine import LatticeError, StateStore
-
 
 ROOT = Path(__file__).resolve().parents[1]
 ACTION_EVENTS = {
@@ -102,7 +102,13 @@ def _finish(
     payload: Callable[[Any, dict[str, Any]], dict[str, Any]],
 ) -> dict[str, Any]:
     lease = _lease_context(store, lease_id)
-    result = operation()
+    backend = backend_for_store(store)
+    try:
+        backend.begin_project_write(lease["project_id"])
+        result = operation()
+    except Exception:
+        backend.rollback()
+        raise
     event = _record_committed_event(
         store,
         project_id=lease["project_id"],
@@ -115,15 +121,22 @@ def _finish(
             "action_key": lease["action_key"],
             "action_kind": lease["action_kind"],
             "target_id": lease["target_id"],
+            "state_backend": backend.name,
             **payload(result, lease),
         },
     )
-    return {"result": result, "lifecycle": event}
+    return {"result": result, "lifecycle": event, "state_backend": backend.name}
 
 
 def release_action(store: StateStore, lease_id: str, role: str) -> dict[str, Any]:
     lease = _lease_context(store, lease_id)
-    store.release_lease(lease_id, role)
+    backend = backend_for_store(store)
+    try:
+        backend.begin_project_write(lease["project_id"])
+        store.release_lease(lease_id, role)
+    except Exception:
+        backend.rollback()
+        raise
     event = _record_committed_event(
         store,
         project_id=lease["project_id"],
@@ -136,9 +149,10 @@ def release_action(store: StateStore, lease_id: str, role: str) -> dict[str, Any
             "action_key": lease["action_key"],
             "action_kind": lease["action_kind"],
             "target_id": lease["target_id"],
+            "state_backend": backend.name,
         },
     )
-    return {"released": lease_id, "lifecycle": event}
+    return {"released": lease_id, "lifecycle": event, "state_backend": backend.name}
 
 
 def submit_action(

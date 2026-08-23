@@ -42,7 +42,9 @@ The Postgres adapter accepts a DB-API-style connection and imports no Postgres d
 
 The advisory-lock key is derived deterministically from the project ID, so separate runtimes serialize consequential writes to the same project while unrelated projects can proceed independently.
 
-This slice routes claim and lease renewal through the backend interface. Subsequent 0.0.6 work will move the remaining concurrency-sensitive guarded transitions behind the same boundary before enabling a Postgres-backed `StateStore`.
+Claim, renewal, release, submission, failure, verification, milestone acceptance, commitment fulfillment, and exception resolution now enter the same backend project-write boundary before invoking the existing guarded `StateStore` transition. The backend does not replace those transitions; it serializes the authority decision around them.
+
+Remaining 0.0.6 storage work is to make `StateStore` construction and SQL execution backend-capable, then prove race behavior for non-leased semantic mutations and concurrent acceptance paths before enabling a Postgres-backed runtime.
 
 ## Invariants
 

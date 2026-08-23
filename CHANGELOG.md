@@ -8,6 +8,8 @@
 - Extracted a concurrency-critical state-backend transaction interface with SQLite and Postgres implementations.
 - Added a deterministic project-scoped Postgres advisory-lock key so distributed writers can serialize one project's guarded writes without globally blocking unrelated projects.
 - Kept Postgres driver selection outside the local-first core; the reference backend accepts a DB-API-style connection and adds no mandatory dependency.
+- Routed leased release, submission, failure, verification, milestone acceptance, commitment fulfillment, and exception resolution through the same project-scoped backend write boundary.
+- Recorded the selected state backend on lifecycle telemetry so supervision can distinguish local and shared-writer execution paths.
 
 ## 0.0.5
 
