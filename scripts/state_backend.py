@@ -28,7 +28,7 @@ class SQLiteStateBackend:
     name: str = "sqlite"
 
     def begin_project_write(self, project_id: str) -> None:
-        del project_id  # SQLite serializes all writers for this local database.
+        del project_id
         self.connection.execute("BEGIN IMMEDIATE")
 
     def commit(self) -> None:
@@ -47,12 +47,7 @@ def project_lock_key(project_id: str) -> int:
 
 @dataclass
 class PostgresStateBackend:
-    """Reference Postgres transaction boundary using a project advisory lock.
-
-    The connection is any DB-API-style connection whose cursor supports execute().
-    No Postgres driver is imported here; deployments may supply psycopg or another
-    compatible driver without making it a dependency of the local-first core.
-    """
+    """Postgres transaction boundary using a project advisory lock."""
 
     connection: Any
     name: str = "postgres"
@@ -70,10 +65,8 @@ class PostgresStateBackend:
 
 
 def backend_for_store(store: Any) -> StateBackend:
-    """Return the backend used by the current local StateStore.
-
-    StateStore remains SQLite-backed in this slice; routing this decision through
-    one function lets concurrency-critical operations stop depending on SQLite
-    syntax before the full shared-store constructor is introduced.
-    """
-    return SQLiteStateBackend(store.conn)
+    """Return the transaction backend matching the store connection dialect."""
+    connection = store.conn
+    if getattr(connection, "dialect", None) == "postgres":
+        return PostgresStateBackend(connection.raw)
+    return SQLiteStateBackend(connection)
