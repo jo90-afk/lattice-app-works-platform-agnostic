@@ -50,7 +50,7 @@ def _headline(model: dict) -> tuple[str, str]:
     ready = int(portfolio.get("ready_actions", 0))
     if blocking:
         return (
-            f"{blocking} decision{'s' if blocking != 1 else ''} need your attention.",
+            f"{blocking} {'decisions need' if blocking != 1 else 'decision needs'} your attention.",
             "Progress is blocked at an authority boundary. Decide here; Lattice will keep the decision in durable project history.",
         )
     if decisions:
@@ -147,14 +147,14 @@ def _decision_cards(items: list[dict]) -> str:
     return "".join(cards)
 
 
-def _project_card(item: dict) -> str:
+def _project_card(item: dict, principal_action_keys: set[str], principal_exception_ids: set[str]) -> str:
     project = item["project"]
     objective = item.get("objective") or {}
     milestone = item.get("milestone") or {}
-    frontier = item.get("frontier") or []
+    frontier = [action for action in (item.get("frontier") or []) if action.get("action_key") not in principal_action_keys]
     leases = item.get("active_leases") or []
     verification = item.get("pending_verification") or []
-    exceptions = item.get("open_exceptions") or []
+    exceptions = [exception for exception in (item.get("open_exceptions") or []) if exception.get("id") not in principal_exception_ids]
     temporal = item.get("temporal_health") or {}
     blocked = temporal.get("blocked_conditions") or []
     readiness = item.get("readiness") or {}
@@ -232,7 +232,9 @@ def render_html(model: dict, flash: str | None = None, flash_error: bool = False
     portfolio = model.get("portfolio") or {}
     telemetry = model.get("operational_telemetry") or {}
     headline, lede = _headline(model)
-    projects = "".join(_project_card(item) for item in model.get("projects", [])) or "<p class='empty'>No projects are registered.</p>"
+    principal_action_keys = {item["action_key"] for item in inbox.get("items", [])}
+    principal_exception_ids = {item["target_id"] for item in inbox.get("items", []) if item.get("kind") == "exception"}
+    projects = "".join(_project_card(item, principal_action_keys, principal_exception_ids) for item in model.get("projects", [])) or "<p class='empty'>No projects are registered.</p>"
     changes = model.get("recent_accepted_changes") or []
     change_html = _list(changes[:8], _change_label, lambda x:f"{x['project_id']} · {x['role']} · r{x['revision']} · {x['created_at']}", empty="No accepted changes recorded yet.")
     flash_html = f"<div class='flash {'error' if flash_error else ''}'>{_safe(flash)}</div>" if flash else ""
@@ -246,7 +248,7 @@ def render_html(model: dict, flash: str | None = None, flash_error: bool = False
     return f"""<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Lattice Control</title><style>
 :root{{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#0d0f11;color:#f3f4f5}}*{{box-sizing:border-box}}body{{margin:0;background:#0d0f11;color:#f3f4f5}}main{{max-width:1180px;margin:auto;padding:32px 24px 72px}}h1,h2,h3,p{{margin-top:0}}h1{{font-size:clamp(2rem,5vw,4.6rem);line-height:.96;letter-spacing:-.055em;margin-bottom:14px;max-width:900px}}h2{{letter-spacing:-.025em}}h3{{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:#9aa1a8}}.hero{{padding:24px 0 30px;border-bottom:1px solid #272b2f}}.hero-top{{display:flex;justify-content:space-between;gap:24px;align-items:flex-start}}.brand{{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:#747c84}}.lede,.detail{{color:#aab0b6;line-height:1.5;max-width:760px}}.summary-strip{{display:flex;gap:20px;flex-wrap:wrap;margin-top:20px;color:#aab0b6;font-size:.86rem}}.summary-strip b{{color:#f3f4f5}}.flash{{margin:18px 0 0;padding:12px 14px;border:1px solid #315844;background:#102119;border-radius:8px;color:#bfe3ce}}.flash.error{{border-color:#713c3c;background:#241313;color:#f0bbbb}}.section-head{{display:flex;justify-content:space-between;gap:20px;align-items:end;margin:34px 0 12px}}.section-head h2{{margin:0;font-size:1.05rem}}.section-head p{{margin:0;color:#747c84;font-size:.82rem}}.decision,.project-card,.quiet,.activity{{border:1px solid #292e33;background:#131619;border-radius:12px;padding:18px;margin-bottom:12px}}.decision{{border-color:#66502e;background:#18150f}}.decision-top,.project-card>header{{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}}.decision h2,.project-card h2{{font-size:1.25rem;margin:3px 0 0}}.decision-question{{font-size:1.05rem;line-height:1.4;margin:18px 0 8px;max-width:800px}}.kicker{{font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:#7f878f}}.pill{{border:1px solid #3b4249;border-radius:999px;padding:5px 8px;font-size:.64rem;letter-spacing:.08em;color:#abb2b9;white-space:nowrap}}.pill.attention{{border-color:#7a5a2d;color:#e1bd7e}}.impact{{display:grid;grid-template-columns:1fr 1fr 2fr;gap:8px;margin:18px 0}}.impact>div,.goal{{background:#101214;border-radius:8px;padding:12px}}.impact span,.goal span{{display:block;color:#737b83;text-transform:uppercase;letter-spacing:.08em;font-size:.65rem;margin-bottom:5px}}.impact strong,.goal strong{{font-size:.87rem;line-height:1.4}}.decision-form{{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;padding-top:4px}}label{{font-size:.72rem;color:#9aa1a8;text-transform:uppercase;letter-spacing:.06em}}textarea{{display:block;width:100%;margin-top:7px;resize:vertical;border:1px solid #3b4249;background:#0d0f11;color:#f3f4f5;border-radius:8px;padding:10px;font:inherit;text-transform:none;letter-spacing:0}}button{{border:0;border-radius:8px;background:#e8e3d8;color:#111;padding:11px 16px;font-weight:700;cursor:pointer;min-height:42px}}button:hover{{background:#fff}}details{{border-top:1px solid #292e33;margin-top:16px;padding-top:12px}}summary{{cursor:pointer;color:#90979e;font-size:.78rem}}.detail-grid,.inspect-grid{{display:grid;grid-template-columns:1fr 1.4fr .7fr;gap:16px;margin-top:14px}}.detail-grid p{{color:#aab0b6;line-height:1.45;font-size:.85rem}}.quiet{{display:flex;justify-content:space-between;gap:12px;color:#98a0a8}}.quiet span{{color:#697078}}.goal{{margin:14px 0}}.goal small{{display:block;color:#8d949a;margin-top:4px}}.project-columns{{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}}.project-columns>section{{border:1px solid #252a2e;border-radius:9px;padding:12px;min-width:0}}.project-columns h3{{display:flex;justify-content:space-between;margin-bottom:10px}}.project-columns h3 b{{color:#d2d6da}}.attention-col:not(:has(.empty)){{border-color:#5a4930}}.rows{{list-style:none;margin:0;padding:0}}.rows li{{padding:9px 0;border-top:1px solid #24292d}}.rows li:first-child{{border-top:0;padding-top:0}}.rows strong,.rows span{{display:block}}.rows strong{{font-size:.86rem;line-height:1.35}}.rows span{{color:#737b83;font-size:.72rem;margin-top:3px;line-height:1.35}}.empty{{color:#626970;font-size:.8rem;line-height:1.4;margin:0}}.project-foot{{display:flex;gap:18px;flex-wrap:wrap;color:#747c84;font-size:.72rem;margin-top:12px}}.project-foot b{{color:#bcc2c7}}.activity-grid{{display:grid;grid-template-columns:2fr 1fr;gap:12px}}.system-list{{color:#858d94;font-size:.8rem;line-height:1.8;margin:0;padding-left:18px}}code{{font-family:ui-monospace,monospace;color:#8d959c}}@media(max-width:800px){{main{{padding:22px 14px 56px}}.hero-top,.decision-top,.project-card>header,.section-head{{align-items:flex-start}}.impact,.project-columns,.detail-grid,.inspect-grid,.activity-grid{{grid-template-columns:1fr}}.decision-form{{grid-template-columns:1fr}}button{{width:100%}}.quiet{{display:block}}.quiet span{{display:block;margin-top:4px}}}}@media(max-width:520px){{h1{{font-size:2.55rem}}.hero-top{{display:block}}.hero-top .brand{{margin-bottom:14px}}.decision,.project-card,.quiet,.activity{{padding:14px}}.impact{{margin:14px 0}}.section-head{{margin-top:28px}}}}
 </style></head><body><main>
-<section class='hero'><div class='hero-top'><div class='brand'>Lattice / Human control</div><code>0.1.1 · {_safe(model.get('state_backend','sqlite'))}</code></div><h1>{_safe(headline)}</h1><p class='lede'>{_safe(lede)}</p><div class='summary-strip'><span><b>{portfolio.get('active_projects',0)}</b> active projects</span><span><b>{portfolio.get('in_flight',0)}</b> in flight</span><span><b>{portfolio.get('pending_verification',0)}</b> verification</span><span><b>{portfolio.get('ready_actions',0)}</b> ready next</span><span><b>{portfolio.get('open_exceptions',0)}</b> exceptions</span></div>{flash_html}</section>
+<section class='hero'><div class='hero-top'><div class='brand'>Lattice / Human control</div><code>0.1.2 · {_safe(model.get('state_backend','sqlite'))}</code></div><h1>{_safe(headline)}</h1><p class='lede'>{_safe(lede)}</p><div class='summary-strip'><span><b>{portfolio.get('active_projects',0)}</b> active projects</span><span><b>{portfolio.get('in_flight',0)}</b> in flight</span><span><b>{portfolio.get('pending_verification',0)}</b> verification</span><span><b>{portfolio.get('ready_actions',0)}</b> ready next</span><span><b>{portfolio.get('open_exceptions',0)}</b> exceptions</span></div>{flash_html}</section>
 <div class='section-head'><h2>Your decisions</h2><p>{inbox.get('blocking_count',0)} blocking · {inbox.get('count',0)} total</p></div>{_decision_cards(inbox.get('items',[]))}
 <div class='section-head'><h2>Projects</h2><p>Now → next → attention</p></div>{projects}
 <div class='section-head'><h2>What changed</h2><p>Accepted durable state only</p></div><div class='activity-grid'><section class='activity'>{change_html}</section><section class='activity'><h3>System health</h3><ul class='system-list'>{''.join(f'<li>{bit}</li>' for bit in system_bits)}</ul></section></div>
@@ -254,7 +256,7 @@ def render_html(model: dict, flash: str | None = None, flash_error: bool = False
 
 
 class ControlHandler(BaseHTTPRequestHandler):
-    server_version = "LatticeControl/0.1.1"
+    server_version = "LatticeControl/0.1.2"
 
     def _model(self) -> dict:
         query = parse_qs(urlparse(self.path).query)
