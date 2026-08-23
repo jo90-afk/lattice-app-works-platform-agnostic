@@ -22,6 +22,10 @@
 - Scheduler plans are read-only and Principal actions are never auto-scheduled; dispatch persists only leases granted through the existing atomic host-claim path and continues unrelated projects when one is blocked.
 - Made canonical `agency.yaml` role write domains executable: repository-local submissions are rejected before mutation when the leasing role does not own the artifact path or the path crosses project boundaries.
 - Made the bounded scheduler avoid concurrent same-project roles with overlapping canonical write domains instead of relying on separate leases as a social convention.
+- Made truth revision compare-and-swap: the primary `truth-revise` command requires the exact observed truth version, and stale writers are rejected under the project write lock rather than overwriting a newer proposition.
+- Serialized hosted-delta acceptance by rechecking `base_revision` inside the project write boundary immediately before semantic mutation; two deltas prepared from the same old revision cannot both commit even when they target different actions.
+- Routed the primary CLI claim and hosted-delta paths through the 0.0.6 atomic implementations so legacy entrypoints cannot bypass concurrency semantics.
+- Made Postgres global snapshot revision allocation atomic with `UPDATE ... RETURNING`, preserving distinct monotonic revisions when unrelated projects mutate concurrently under different project advisory locks.
 
 ## 0.0.5
 
