@@ -10,6 +10,8 @@
 - Kept Postgres driver selection outside the local-first core; the reference backend accepts a DB-API-style connection and adds no mandatory dependency.
 - Routed leased release, submission, failure, verification, milestone acceptance, commitment fulfillment, and exception resolution through the same project-scoped backend write boundary.
 - Recorded the selected state backend on lifecycle telemetry so supervision can distinguish local and shared-writer execution paths.
+- Added adversarial multi-connection tests proving a shared verifier lease and Assurance lease produce one durable winner and reject stale second attempts.
+- Verified that revising a condition input revokes the worker lease and returns a new versioned action to the frontier, so work based on superseded requirements cannot submit.
 
 ## 0.0.5
 
