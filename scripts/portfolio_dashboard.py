@@ -139,12 +139,20 @@ def _decision_strip(inbox: dict) -> str:
     cards = []
     for item in items:
         affected = item.get("affected_state") or {}
-        milestone = affected.get("active_milestone") or {}
+        target = affected.get("target") or {}
+        target_state = target.get("state") or {}
+        milestone = (
+            target_state if target.get("type") == "milestone" and target_state
+            else affected.get("active_milestone")
+            or affected.get("latest_accepted_milestone")
+            or {}
+        )
+        milestone_status = str(milestone.get("status") or "").replace("_", " ").title()
         cards.append(
             "<article class='decision-card'>"
             f"<div><span class='eyebrow'>Principal exception · {_safe(item['project_id'])}</span>"
             f"<h2>{_safe(item['title'])}</h2><p>{_safe(item.get('detail') or item.get('decision_required') or '')}</p>"
-            f"<span class='decision-context'>{_safe(milestone.get('title') or 'No active milestone')}</span></div>"
+            f"<span class='decision-context'>{_safe(milestone.get('title') or 'Project-level decision')}{' · ' + _safe(milestone_status) if milestone_status else ''}</span></div>"
             f"<a class='button secondary' href='/project?project={quote(str(item['project_id']))}'>Review exception</a>"
             "</article>"
         )
@@ -154,8 +162,11 @@ def _decision_strip(inbox: dict) -> str:
 def _project_card(project: dict) -> str:
     meta = project["project"]
     objective = project.get("objective") or {}
-    milestone = project.get("milestone") or {}
-    pct, progress_label = _progress(project)
+    milestone = project.get("current_milestone") or project.get("milestone") or {}
+    if milestone and milestone.get("status") == "accepted" and not project.get("milestone"):
+        pct, progress_label = 100, "Latest milestone accepted"
+    else:
+        pct, progress_label = _progress(project)
     state, state_label = _project_state(project)
     agents = _agent_rows(project)
     exceptions = [e for e in (project.get("open_exceptions") or []) if not e.get("principal_only")]
@@ -215,9 +226,10 @@ def render_project_html(model: dict, project_id: str) -> str:
         return "<!doctype html><html><body><p>Project not found.</p></body></html>"
     meta = project["project"]
     objective = project.get("objective") or {}
-    milestone = project.get("milestone") or {}
+    milestone = project.get("current_milestone") or project.get("milestone") or {}
+    milestones = project.get("milestones") or []
     graph = project.get("consequence_graph") or {}
     evidence = project.get("evidence_chain") or []
     truths = project.get("frontier_truths") or []
     exceptions = project.get("open_exceptions") or []
-    return f"""<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{_safe(meta['name'])} · Lattice</title><style>{_styles()}</style></head><body><header class='top'><div class='brand'><span class='brand-mark'>◇</span>LATTICE</div><nav class='nav'><span>v{_safe(RELEASE)}</span><span class='principal'>P</span></nav></header><main class='detail-shell'><a class='back' href='/'>← Project portfolio</a><h1>{_safe(meta['name'])}</h1><p class='objective'>{_safe(objective.get('title') or 'No active objective')} · {_safe(milestone.get('title') or 'No active milestone')}</p><section class='detail-card'><h2>Live agents</h2><div class='agents'>{_agent_table(project)}</div></section><section class='detail-card'><h2>Current frontier</h2><div class='detail-list'>{''.join(f"<div><strong>{_safe(a.get('role'))}</strong> · {_safe(a.get('title'))} · {_safe(a.get('kind'))}</div>" for a in (project.get('frontier') or [])) or 'No ready actions.'}</div></section><section class='detail-card'><h2>Exceptions and evidence</h2><div class='detail-list'><strong>{len(exceptions)}</strong> open exceptions · <strong>{len(evidence)}</strong> evidence records · <strong>{len(truths)}</strong> frontier truths · <strong>{sum((graph.get('counts') or {}).values())}</strong> consequence entities</div></section></main></body></html>"""
+    return f"""<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{_safe(meta['name'])} · Lattice</title><style>{_styles()}</style></head><body><header class='top'><div class='brand'><span class='brand-mark'>◇</span>LATTICE</div><nav class='nav'><span>v{_safe(RELEASE)}</span><span class='principal'>P</span></nav></header><main class='detail-shell'><a class='back' href='/'>← Project portfolio</a><h1>{_safe(meta['name'])}</h1><p class='objective'>{_safe(objective.get('title') or 'Objective complete')} · {_safe(milestone.get('title') or 'No milestone recorded')}</p><section class='detail-card'><h2>Milestones</h2><div class='detail-list'>{''.join(f"<div><strong>{_safe(m.get('ordinal'))}. {_safe(m.get('title'))}</strong> · {_safe(str(m.get('status') or '').title())}</div>" for m in milestones) or 'No milestones recorded.'}</div></section><section class='detail-card'><h2>Live agents</h2><div class='agents'>{_agent_table(project)}</div></section><section class='detail-card'><h2>Current frontier</h2><div class='detail-list'>{''.join(f"<div><strong>{_safe(a.get('role'))}</strong> · {_safe(a.get('title'))} · {_safe(a.get('kind'))}</div>" for a in (project.get('frontier') or [])) or 'No ready actions.'}</div></section><section class='detail-card'><h2>Exceptions and evidence</h2><div class='detail-list'><strong>{len(exceptions)}</strong> open exceptions · <strong>{len(evidence)}</strong> evidence records · <strong>{len(truths)}</strong> frontier truths · <strong>{sum((graph.get('counts') or {}).values())}</strong> consequence entities</div></section></main></body></html>"""

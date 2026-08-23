@@ -394,6 +394,19 @@ def _project_read_model(
         "SELECT * FROM milestones WHERE project_id = ? AND status = 'active'",
         (project_id,),
     ).fetchone()
+    milestones = [
+        dict(row)
+        for row in store.conn.execute(
+            """SELECT * FROM milestones WHERE project_id = ?
+               ORDER BY ordinal, created_at, id""",
+            (project_id,),
+        ).fetchall()
+    ]
+    latest_accepted_milestone = next(
+        (item for item in reversed(milestones) if item["status"] == "accepted"),
+        None,
+    )
+    current_milestone = dict(milestone) if milestone else latest_accepted_milestone
     leases = [
         dict(row)
         for row in store.conn.execute(
@@ -480,6 +493,8 @@ def _project_read_model(
         "semantic_revision": store.project_revision(project_id),
         "objective": dict(objective) if objective else None,
         "milestone": dict(milestone) if milestone else None,
+        "current_milestone": current_milestone,
+        "milestones": milestones,
         "readiness": readiness,
         "frontier": store.frontier(project_id, limit=frontier_limit),
         "active_leases": leases,
