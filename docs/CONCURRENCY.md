@@ -14,36 +14,27 @@ Long-running workers may renew an active lease through the versioned host-adapte
 
 Renewal does not grant new authority and does not change project truth. It only extends the lifetime of authority already granted by the original claim. A worker cannot renew another actor's lease or revive an expired lease.
 
-Example envelope:
-
-```json
-{
-  "format": "lattice-host-adapter",
-  "version": 1,
-  "operation": "renew",
-  "project_id": "first-project",
-  "host": "codex",
-  "workspace_id": "worktree-42",
-  "lease_id": "lease-abc123",
-  "actor": "worker-1",
-  "role": "application",
-  "ttl_minutes": 30
-}
-```
-
 ## Artifact write ownership
 
 The canonical role write domains in `agency.yaml` are executable concurrency policy. `scripts/write_ownership.py` reads those domains directly rather than maintaining a second permissions map.
 
-A repository-local artifact submitted under a lease must:
+A repository-local artifact submitted under a lease must remain inside the leased project capsule, fall inside one of the leasing role's declared write domains, and avoid traversal outside that domain. Logical external references such as `artifact://...` are evidence identities rather than claims of repository ownership.
 
-- remain inside the leased project capsule;
-- fall inside one of the leasing role's declared write domains; and
-- avoid path traversal outside that domain.
+Submission ownership is checked before semantic mutation, so a rejected cross-domain artifact leaves the lease and readiness condition unchanged. The bounded scheduler also compares active and proposed role domains and will not co-schedule roles whose declared repository paths overlap.
 
-Logical external references such as `artifact://...` are evidence identities rather than claims of repository ownership and remain valid.
+## Truth compare-and-swap
 
-Submission ownership is checked before semantic mutation, so a rejected cross-domain artifact leaves the lease and readiness condition unchanged. The bounded scheduler also compares active and proposed role domains and will not co-schedule roles whose declared repository paths overlap. The atomic claim remains the authority grant; write-domain checks make the filesystem consequence of that authority explicit.
+A truth revision is a semantic replacement, not a last-writer-wins text edit. The primary `truth-revise` command therefore requires `--expected-version`. `scripts/semantic_writes.py` acquires the project's backend write boundary, rereads the truth under that boundary, and applies the revision only when the current version is exactly the version the caller observed.
+
+Two workers that both read truth version 1 may both formulate a proposed version 2, but only one can commit it. The other receives an explicit stale-version rejection and must reread the current truth before deciding whether its proposition still applies.
+
+## Serialized hosted delta acceptance
+
+Hosted deltas remain project-revision guarded, but the stale check is now repeated inside the project write boundary immediately before the semantic transition. This closes the claim-to-completion race in which two different frontier actions could both have been prepared from the same old project revision.
+
+`scripts/hosted_delta.py` performs a fast stale check, atomically claims the requested action, then acquires the project write boundary again and compares `base_revision` with the current semantic project revision at commit time. Once one delta changes project semantics, any other delta based on the old revision is rejected and its coordination lease is released rather than guessed forward.
+
+The primary `scripts/lattice.py apply-delta` path uses this serialized acceptance path. The primary `claim` command also uses the 0.0.6 atomic claim implementation.
 
 ## Operational state backends
 
@@ -54,28 +45,30 @@ The implementations are:
 - `SQLiteStateBackend` — default local backend; serializes writers with `BEGIN IMMEDIATE`.
 - `PostgresStateBackend` — shared-writer backend; acquires a deterministic project-scoped `pg_advisory_xact_lock` inside the connection's current DB-API transaction.
 
-Claim, renewal, release, submission, failure, verification, milestone acceptance, commitment fulfillment, and exception resolution enter the same backend project-write boundary before invoking the existing guarded `StateStore` transition. The backend does not replace those transitions; it serializes the authority decision around them.
+Claim, renewal, release, submission, failure, verification, milestone acceptance, commitment fulfillment, exception resolution, truth CAS, and hosted-delta commit checks use the same backend project-write boundary before invoking the existing guarded state transition.
+
+## Postgres global revision allocation
+
+Project-scoped locks intentionally permit unrelated projects to write concurrently, so they cannot safely protect the global portable-snapshot revision counter. `PostgresStateStore._bump_revision()` therefore allocates revisions with one atomic database `UPDATE ... RETURNING` against the `meta.revision` row.
+
+That row lock is held only for the revision increment; it does not turn unrelated project writes into one global project lock. Concurrent mutations in different projects receive distinct monotonic global revisions while retaining independent project advisory locks.
 
 ## Postgres StateStore
 
-`scripts/postgres_store.py` runs the canonical `StateStore` semantics on a supplied DB-API Postgres connection. It uses the compatibility layer in `scripts/sql_dialect.py` for parameter syntax and sqlite3.Row-compatible result access, renders Postgres DDL from the canonical `runtime/schema.sql`, and preserves `state/current.json` as the portable snapshot contract.
+`scripts/postgres_store.py` runs the canonical `StateStore` semantics on a supplied DB-API Postgres connection. It uses the compatibility layer in `scripts/sql_dialect.py` for parameter syntax and sqlite3.Row-compatible result access, renders Postgres DDL from canonical `runtime/schema.sql`, and preserves `state/current.json` as the portable snapshot contract.
 
-Snapshot export uses explicit primary/composite key ordering rather than SQLite `rowid`. A live Postgres store is authoritative after one-time empty-store bootstrap; repository snapshots cannot silently rewind shared operational state. Portable checkpoint publication is explicit through `scripts/shared_state_checkpoint.py`.
+A live Postgres store is authoritative after one-time empty-store bootstrap; repository snapshots cannot silently rewind shared operational state. Portable checkpoint publication is explicit through `scripts/shared_state_checkpoint.py`.
 
-Postgres driver selection remains outside the core. The default installation is still Python's standard library plus SQLite. A shared deployment installs a compatible `psycopg` driver and sets:
-
-```bash
-export LATTICE_DATABASE_URL='postgresql://user:password@host/database'
-python3 scripts/shared_host_adapter.py --file envelope.json
-```
-
-`scripts/store_factory.py` loads `psycopg` only when a Postgres URL is explicitly configured. The ordinary local CLI remains SQLite-first.
+Postgres driver selection remains outside the core. The default installation is still Python's standard library plus SQLite. A shared deployment installs a compatible `psycopg` driver and sets `LATTICE_DATABASE_URL`; `scripts/store_factory.py` loads the driver only when that shared store is explicitly configured.
 
 ## Validation
 
-CI starts a real Postgres service and runs the guarded lifecycle through it: objective and milestone creation, condition derivation, hosted claim, submission, independent verification, and Assurance acceptance. The same test exports the portable snapshot, rebuilds a clean Postgres schema from it, verifies semantic state survives, and proves event sequencing continues after the imported maximum ID.
+CI starts a real Postgres service and runs the guarded lifecycle through it. Concurrency regressions additionally use separate live Postgres connections to prove:
 
-Postgres support is therefore gated by the same semantic lifecycle rather than by adapter-unit tests alone.
+- competing revisions of one truth version produce one winner and one stale writer;
+- two hosted deltas prepared from one project revision produce one semantic winner even when they target different actions;
+- simultaneous semantic writes to different projects allocate distinct global snapshot revisions; and
+- the existing claim, verification, Assurance, snapshot round-trip, and event-sequence contracts remain intact.
 
 ## Invariants
 
@@ -86,8 +79,11 @@ Every operational backend preserves these rules:
 - lease renewal requires the current owner;
 - repository artifacts remain inside the leasing role's canonical write domains;
 - workers with overlapping role write domains are not intentionally co-scheduled inside one project;
+- truth replacement rejects stale observed versions instead of silently overwriting them;
+- hosted deltas recheck project revision at serialized semantic commit;
 - expired authority cannot be resurrected;
 - semantic revisions are distinct from operational event sequence;
 - unrelated projects do not share a project-scoped lock in distributed backends;
+- global Postgres snapshot revisions remain unique under cross-project concurrency;
 - acceptance and verification remain guarded state transitions rather than host-side convention;
 - `state/current.json` remains the portable snapshot contract.
