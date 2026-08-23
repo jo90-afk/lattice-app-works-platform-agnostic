@@ -13,12 +13,7 @@ _URI = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
 
 
 def role_write_domains(root: Path) -> dict[str, list[str]]:
-    """Parse the simple `roles.<role>.writes` subset of canonical agency.yaml.
-
-    Lattice deliberately keeps agency.yaml authoritative instead of introducing a
-    second machine-maintained permissions file. The agency seed uses a stable,
-    indentation-based role/write shape that can be read without a YAML dependency.
-    """
+    """Parse the simple `roles.<role>.writes` subset of canonical agency.yaml."""
     text = (root / "agency.yaml").read_text(encoding="utf-8")
     domains: dict[str, list[str]] = {}
     in_roles = False
@@ -35,7 +30,6 @@ def role_write_domains(root: Path) -> dict[str, list[str]]:
             continue
         if raw and not raw.startswith(" "):
             break
-
         role_match = re.match(r"^  ([a-z][a-z0-9_-]*):\s*$", raw)
         if role_match:
             current_role = role_match.group(1)
@@ -81,14 +75,17 @@ def repository_artifact_owned(
     artifact_ref: str,
 ) -> bool:
     """Return true for external logical refs or repository paths owned by role."""
-    del root  # kept in signature for symmetry with validation helpers
     if _URI.match(artifact_ref):
         return True
     path = _normalize_repo_path(artifact_ref)
-    project_root = f"projects/{project_id}/"
-    if not path.startswith(project_root):
+    if not path.startswith(f"projects/{project_id}/"):
         return False
-    return False  # caller evaluates against parsed domains
+    patterns = role_write_domains(root).get(role, [])
+    return any(
+        path == _prefix(pattern, project_id)
+        or path.startswith(_prefix(pattern, project_id) + "/")
+        for pattern in patterns
+    )
 
 
 def validate_artifact_ownership(
@@ -97,21 +94,15 @@ def validate_artifact_ownership(
     role: str,
     artifact_refs: list[str],
 ) -> None:
-    domains = role_write_domains(root)
-    patterns = domains.get(role, [])
     for artifact_ref in artifact_refs:
-        if _URI.match(artifact_ref):
-            continue
-        path = _normalize_repo_path(artifact_ref)
-        if not path.startswith(f"projects/{project_id}/"):
-            raise LatticeError(
-                f"Artifact {artifact_ref!r} is outside project {project_id!r}"
-            )
-        if not any(
-            path == _prefix(pattern, project_id)
-            or path.startswith(_prefix(pattern, project_id) + "/")
-            for pattern in patterns
-        ):
+        if not repository_artifact_owned(root, project_id, role, artifact_ref):
+            if _URI.match(artifact_ref):
+                continue
+            path = _normalize_repo_path(artifact_ref)
+            if not path.startswith(f"projects/{project_id}/"):
+                raise LatticeError(
+                    f"Artifact {artifact_ref!r} is outside project {project_id!r}"
+                )
             raise LatticeError(
                 f"Role {role!r} does not own artifact path {artifact_ref!r}"
             )
