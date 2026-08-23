@@ -8,12 +8,9 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 
-class DialectError(RuntimeError):
-    pass
-
-
 def postgres_sql(sql: str) -> str:
-    """Translate the limited SQLite SQL idioms used by StateStore to Postgres."""
+    """Translate the limited SQLite query idioms used by StateStore to Postgres."""
+    ignored_insert = "INSERT OR IGNORE" in sql.upper()
     translated = sql.replace("?", "%s")
     translated = re.sub(
         r"INSERT\s+OR\s+IGNORE\s+INTO",
@@ -21,12 +18,26 @@ def postgres_sql(sql: str) -> str:
         translated,
         flags=re.IGNORECASE,
     )
-    if re.search(r"INSERT\s+INTO\s+meta\s*\(", translated, flags=re.IGNORECASE) and "OR IGNORE" not in sql.upper():
-        pass
-    if "INSERT OR IGNORE" in sql.upper():
+    if ignored_insert:
         translated = translated.rstrip().rstrip(";") + " ON CONFLICT DO NOTHING"
     translated = translated.replace("SELECT last_insert_rowid()", "SELECT LASTVAL()")
     return translated
+
+
+def postgres_schema(sqlite_schema: str) -> str:
+    """Render the canonical SQLite schema into its Postgres-compatible form."""
+    lines = [
+        line for line in sqlite_schema.splitlines()
+        if not line.strip().upper().startswith("PRAGMA ")
+    ]
+    rendered = "\n".join(lines)
+    rendered = re.sub(
+        r"id\s+INTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT",
+        "id BIGSERIAL PRIMARY KEY",
+        rendered,
+        flags=re.IGNORECASE,
+    )
+    return rendered.strip() + "\n"
 
 
 @dataclass
