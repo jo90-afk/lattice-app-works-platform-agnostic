@@ -1,0 +1,85 @@
+name: Capture Lattice UI 0.1.1
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install browser harness
+        run: |
+          python3 -m pip install playwright
+          python3 -m playwright install --with-deps chromium
+      - name: Seed representative supervision state
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/lattice.py initialize --principal-alias "Repository Owner" --project-id demo-project --project-name "Demo Project"
+          python3 scripts/lattice.py objective-add --project demo-project --id objective-001 --title "Ship a verified public-beta increment" --description "Representative supervision state" --owner-role product
+          python3 scripts/lattice.py milestone-add --project demo-project --objective objective-001 --id milestone-001 --title "Increment is usable and independently verified" --ordinal 1 --activate
+          python3 scripts/lattice.py record-put --project demo-project --id contract-001 --key api.contract --kind contract --title "Public API contract" --body "Stable response contract for the increment." --owner-role architecture --role architecture
+          python3 scripts/lattice.py truth-add --project demo-project --id truth-001 --key beta.requirement --statement "Public beta requires independently verified artifacts." --epistemic-status accepted --attention frontier --material --role director
+          python3 scripts/lattice.py condition-add --project demo-project --objective objective-001 --milestone milestone-001 --id condition-build --key build.reproducible --title "Build is reproducible" --description "Release build succeeds and produces expected artifact." --owner-role release --verifier-role quality --role director --input contract-001 --truth truth-001
+          python3 scripts/lattice.py condition-add --project demo-project --objective objective-001 --milestone milestone-001 --id condition-ui --key ui.supervision --title "Human supervision remains legible" --description "Control surface clearly exposes state, evidence, and attention." --owner-role application --verifier-role quality --role director --input contract-001 --truth truth-001
+          mkdir -p projects/demo-project/ops projects/demo-project/quality
+          printf 'reproducible build\n' > projects/demo-project/ops/build.md
+          printf 'build check passed\n' > projects/demo-project/quality/build-check.txt
+          RELEASE_LEASE=$(python3 scripts/lattice.py claim --project demo-project --role release --actor release-demo | python3 -c 'import json,sys; print(json.load(sys.stdin)["lease_id"])')
+          python3 scripts/lattice.py submit --lease "$RELEASE_LEASE" --role release --summary "Build is reproducible" --artifact projects/demo-project/ops/build.md --evidence-ref projects/demo-project/quality/build-check.txt
+          QUALITY_LEASE=$(python3 scripts/lattice.py claim --project demo-project --role quality --actor quality-demo | python3 -c 'import json,sys; print(json.load(sys.stdin)["lease_id"])')
+          python3 scripts/lattice.py review --lease "$QUALITY_LEASE" --role quality --verdict SATISFIED --summary "Independent build verification passed" --evidence-ref projects/demo-project/quality/build-check.txt
+          python3 scripts/lattice.py claim --project demo-project --role application --actor application-demo --workspace workspace-ui-demo > /tmp/application-claim.json
+          python3 scripts/lattice.py exception-raise --project demo-project --dedupe-key demo.release-risk --title "Confirm public-beta release boundary" --detail "This representative exception requires the Principal to confirm the release boundary." --severity major --owner-role director --principal-only --target-type milestone --target-id milestone-001 --role director
+      - name: Serve control surface
+        shell: bash
+        run: |
+          python3 scripts/control_server.py --host 127.0.0.1 --port 8765 > /tmp/lattice-server.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8765/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/lattice-server.log
+          exit 1
+      - name: Capture screenshots
+        shell: bash
+        run: |
+          mkdir -p ui-screenshots
+          python3 - <<'PY'
+          from pathlib import Path
+          import urllib.request
+          from playwright.sync_api import sync_playwright
+
+          out = Path("ui-screenshots")
+          with urllib.request.urlopen("http://127.0.0.1:8765/api/state") as response:
+              (out / "state.json").write_bytes(response.read())
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              captures = [
+                  ("desktop-viewport.png", {"width": 1440, "height": 1000}, False),
+                  ("desktop-full.png", {"width": 1440, "height": 1000}, True),
+                  ("tablet-full.png", {"width": 900, "height": 1000}, True),
+                  ("mobile-full.png", {"width": 390, "height": 844}, True),
+              ]
+              for filename, viewport, full_page in captures:
+                  page = browser.new_page(viewport=viewport)
+                  page.goto("http://127.0.0.1:8765", wait_until="networkidle")
+                  page.screenshot(path=str(out / filename), full_page=full_page)
+                  page.close()
+              browser.close()
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lattice-ui-0.1.1
+          path: ui-screenshots/
+          if-no-files-found: error
