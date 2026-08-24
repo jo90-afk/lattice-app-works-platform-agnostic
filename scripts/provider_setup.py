@@ -106,6 +106,9 @@ def save_model_preferences(
         raise ValueError("Unsupported fallback provider")
     if not fallback_model:
         raise ValueError("Fallback model is required")
+    configured = {item["provider"] for item in configured_providers()}
+    if fallback_provider not in configured:
+        raise ValueError("Fallback provider is not configured")
     normalized: dict[str, dict[str, str]] = {}
     for role, assignment in role_assignments.items():
         if role not in ROLES:
@@ -116,6 +119,8 @@ def save_model_preferences(
             continue
         if provider not in PROVIDERS or not model:
             raise ValueError(f"Role {role} requires provider and model")
+        if provider not in configured:
+            raise ValueError(f"Role {role} uses an unconfigured provider")
         normalized[role] = {"provider": provider, "model": model}
     _write_private(
         preferences_path(),

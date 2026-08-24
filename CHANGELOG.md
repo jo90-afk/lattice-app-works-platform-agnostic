@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.6
+
+- Add first-run AI provider onboarding to the human control surface instead of requiring users to edit configuration files.
+- Store provider credentials in a local private credential store outside repositories, project state, and snapshots.
+- Add a default model plus optional per-role provider/model assignments so different reasoning and execution roles can use different models.
+- Expose only non-secret provider/model configuration through the dashboard and provider-status API.
+
 ## 0.1.5
 
 - Preserve milestone context after Assurance acceptance so Principal launch decisions remain attached to the exact accepted release milestone.
