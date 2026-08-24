@@ -9,7 +9,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from control_server import apply_principal_action, render_html  # noqa: E402, render_provider_setup_html
+from control_server import (  # noqa: E402
+    apply_principal_action,
+    render_html,
+    render_provider_setup_html,
+)
 from state_engine import StateStore  # noqa: E402
 from supervision_model import supervision_model  # noqa: E402
 
@@ -110,7 +114,6 @@ class ControlServerTest(unittest.TestCase):
         self.assertIn("Architecture", page)
         self.assertIn("password", page)
         self.assertNotIn("api_key", page)
-
 
 
 if __name__ == "__main__":
