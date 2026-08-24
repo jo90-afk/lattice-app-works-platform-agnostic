@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 from concurrency import claim_for_host_atomic
 from lifecycle import fulfill_commitment_action, resolve_exception_action
 from portfolio_dashboard import render_portfolio_html, render_project_html
+from provider_setup import PROVIDERS, ROLES, runtime_model_status, save_model_preferences, save_provider
 from state_engine import LatticeError
 from store_factory import open_state_store
 from supervision import principal_inbox
@@ -228,8 +229,49 @@ def apply_principal_action(store, action_key: str, choice: str, note: str) -> di
     return {"kind": item["kind"], "action_key": action_key, "result": result}
 
 
+def _provider_banner(status: dict) -> str:
+    if not status.get("configured"):
+        return """<section style='margin:0 0 24px;padding:18px 20px;border:1px solid #e1d4b9;background:#fff9ed;border-radius:10px;display:flex;justify-content:space-between;gap:18px;align-items:center'><div><span style='font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#9b8157'>Setup</span><strong style='display:block;font-family:Georgia,serif;font-size:18px;font-weight:500;margin:4px 0'>Connect AI providers</strong><span style='font-size:12px;color:#7c7468'>Add credentials, choose a default model, and optionally assign different models to different agent roles.</span></div><a href='/setup/provider' style='border:1px solid #cdbb98;background:#fff;border-radius:7px;padding:9px 12px;font-size:11px;font-weight:700;white-space:nowrap'>Set up AI providers</a></section>"""
+    providers = ", ".join(item["label"] for item in status.get("providers", []))
+    fallback = status.get("fallback") or {}
+    return f"""<section style='margin:0 0 18px;padding:10px 14px;border:1px solid #e5dfd3;background:#fbfaf6;border-radius:8px;display:flex;justify-content:space-between;gap:12px;align-items:center;font-size:11px;color:#7c817a'><span><strong style='color:#445044'>AI execution</strong> · {html.escape(providers)} · default {html.escape(str(fallback.get('provider','')))} / {html.escape(str(fallback.get('model','')))}</span><a href='/setup/provider' style='font-weight:700;color:#62785e'>Configure models →</a></section>"""
+
+
 def render_html(model: dict, flash: str | None = None, flash_error: bool = False) -> str:
-    return render_portfolio_html(model, flash, flash_error)
+    page = render_portfolio_html(model, flash, flash_error)
+    banner = _provider_banner(runtime_model_status())
+    return page.replace("<section class='portfolio-title'>", banner + "<section class='portfolio-title'>", 1)
+
+
+def render_provider_setup_html(message: str | None = None, error: bool = False) -> str:
+    status = runtime_model_status()
+    configured = {item["provider"]: item for item in status.get("providers", [])}
+    fallback = status.get("fallback") or {}
+    roles = status.get("roles") or {}
+    provider_options = "".join(
+        f"<option value='{html.escape(key)}'{{' selected' if fallback.get('provider') == key else ''}}>{html.escape(spec['label'])}</option>"
+        for key, spec in PROVIDERS.items()
+    )
+    credential_rows = []
+    for key, spec in PROVIDERS.items():
+        state = "Configured" if key in configured else "Not configured"
+        credential_rows.append(f"""<label><span>{html.escape(spec['label'])}</span><small>{state}</small><input type='password' name='key_{html.escape(key)}' autocomplete='off' placeholder='{'Leave blank to keep existing key' if key in configured else 'Paste API key'}'></label>""")
+    role_rows = []
+    for role in ROLES:
+        assignment = roles.get(role) or {}
+        options = ["<option value=''>Use default</option>"] + [
+            f"<option value='{html.escape(key)}'{{' selected' if assignment.get('provider') == key else ''}}>{html.escape(spec['label'])}</option>"
+            for key, spec in PROVIDERS.items()
+        ]
+        role_rows.append(f"""<div class='role-row'><strong>{html.escape(role.title())}</strong><select name='role_provider_{html.escape(role)}'>{''.join(options)}</select><input name='role_model_{html.escape(role)}' value='{html.escape(str(assignment.get('model') or ''))}' placeholder='Model (blank = default)'></div>""")
+    flash = f"<div class='flash {'error' if error else ''}'>{html.escape(message)}</div>" if message else ""
+    return f"""<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Lattice · AI providers</title><style>
+:root{{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#26312b;background:#f5f1e8}}*{{box-sizing:border-box}}body{{margin:0;background:#f5f1e8}}header{{height:60px;padding:0 28px;background:#fbfaf6;border-bottom:1px solid #e5dfd3;display:flex;align-items:center;justify-content:space-between}}header strong{{font-family:Georgia,serif;letter-spacing:.14em}}header a{{font-size:12px;color:#62785e;text-decoration:none}}main{{max-width:860px;margin:auto;padding:40px 24px 70px}}h1{{font-family:Georgia,serif;font-size:31px;font-weight:500;margin:0 0 7px}}.lede{{color:#7e847d;font-family:Georgia,serif;font-style:italic;margin:0 0 28px}}section{{background:#fffdfa;border:1px solid #e5dfd3;border-radius:10px;padding:20px;margin:14px 0}}h2{{font-family:Georgia,serif;font-size:19px;font-weight:500;margin:0 0 4px}}section>p{{font-size:12px;color:#7e847d;margin:0 0 18px;line-height:1.5}}label{{display:grid;grid-template-columns:150px 1fr;gap:8px 14px;align-items:center;margin:12px 0;font-size:12px}}label span{{font-weight:700}}label small{{grid-column:1;font-size:10px;color:#8c918a}}label input{{grid-column:2;grid-row:1 / span 2}}input,select{{width:100%;border:1px solid #dcd6ca;border-radius:7px;background:#fff;padding:9px 10px;font:inherit;color:#26312b}}.role-row{{display:grid;grid-template-columns:150px 180px 1fr;gap:10px;align-items:center;padding:9px 0;border-top:1px solid #eee9df;font-size:11px}}.role-row:first-child{{border-top:0}}details{{border-top:1px solid #eee9df;padding-top:14px}}summary{{cursor:pointer;font-size:12px;font-weight:700;color:#62785e}}button{{border:0;border-radius:7px;background:#6f8669;color:#fff;padding:11px 16px;font-weight:700;cursor:pointer}}.actions{{display:flex;justify-content:flex-end;margin-top:18px}}.flash{{padding:11px 13px;background:#edf4e9;border:1px solid #c9d8c4;border-radius:8px;font-size:12px;color:#557050;margin-bottom:14px}}.flash.error{{background:#faece9;border-color:#e2c1ba;color:#92594f}}.note{{font-size:11px;color:#90958e;margin-top:10px}}@media(max-width:650px){{main{{padding:28px 14px}}label,.role-row{{grid-template-columns:1fr}}label input,label small{{grid-column:1;grid-row:auto}}}}
+</style></head><body><header><strong>LATTICE</strong><a href='/'>← Project portfolio</a></header><main><h1>AI providers</h1><p class='lede'>Connect the models your agency can use, then choose which roles should use which model.</p>{flash}<form method='post' action='/setup/provider'>
+<section><h2>1. Provider credentials</h2><p>Keys are stored in your local Lattice credential store, never in project state, snapshots, or the repository.</p>{''.join(credential_rows)}</section>
+<section><h2>2. Default model</h2><p>Every role uses this unless you override it below.</p><label><span>Provider</span><select name='fallback_provider' required>{provider_options}</select></label><label><span>Model</span><input name='fallback_model' required value='{html.escape(str(fallback.get('model') or ''))}' placeholder='Model ID'></label></section>
+<section><h2>3. Role preferences</h2><p>Optional. Use different models where they fit the work—for example Claude for Experience and GPT for Architecture.</p><details><summary>Customize agent roles</summary><div style='margin-top:12px'>{''.join(role_rows)}</div></details></section>
+<div class='actions'><button type='submit'>Save AI configuration</button></div><p class='note'>Lattice records which provider/model actually performed work as execution provenance. Your secret keys are never included in that record.</p></form></main></body></html>"""
     inbox = model.get("principal_inbox") or {"count": 0, "blocking_count": 0, "items": []}
     portfolio = model.get("portfolio") or {}
     telemetry = model.get("operational_telemetry") or {}
@@ -258,7 +300,7 @@ def render_html(model: dict, flash: str | None = None, flash_error: bool = False
 
 
 class ControlHandler(BaseHTTPRequestHandler):
-    server_version = "LatticeControl/0.1.5"
+    server_version = "LatticeControl/0.1.6"
 
     def _model(self) -> dict:
         query = parse_qs(urlparse(self.path).query)
@@ -280,6 +322,12 @@ class ControlHandler(BaseHTTPRequestHandler):
                 project_id = query.get("project", [""])[0]
                 payload = render_project_html(self._model(), project_id).encode()
                 status, content_type = 200, "text/html; charset=utf-8"
+            elif parsed.path == "/setup/provider":
+                payload = render_provider_setup_html(query.get("message", [None])[0], query.get("error", ["0"])[0] == "1").encode()
+                status, content_type = 200, "text/html; charset=utf-8"
+            elif parsed.path == "/api/provider-status":
+                payload = json.dumps(runtime_model_status(), indent=2, sort_keys=True).encode()
+                status, content_type = 200, "application/json; charset=utf-8"
             elif parsed.path == "/health":
                 payload, status, content_type = b'{"ok":true}\n', 200, "application/json; charset=utf-8"
             else:
@@ -290,21 +338,43 @@ class ControlHandler(BaseHTTPRequestHandler):
         self._send(status, content_type, payload)
 
     def do_POST(self) -> None:  # noqa: N802
-        if urlparse(self.path).path != "/action":
+        route = urlparse(self.path).path
+        if route not in {"/action", "/setup/provider"}:
             self._send(404, "text/plain; charset=utf-8", b"Not found\n")
             return
         length = int(self.headers.get("Content-Length", "0"))
         form = parse_qs(self.rfile.read(length).decode("utf-8"), keep_blank_values=True)
         try:
-            action_key = form.get("action_key", [""])[0]
-            choice = form.get("choice", [""])[0]
-            note = form.get("note", [""])[0]
-            with open_state_store(ROOT) as store:
-                result = apply_principal_action(store, action_key, choice, note)
-            message = "Decision recorded: " + result["kind"]
-            location = "/?" + urlencode({"message": message})
+            if route == "/setup/provider":
+                for provider in PROVIDERS:
+                    key = form.get(f"key_{provider}", [""])[0].strip()
+                    if key:
+                        save_provider(provider, key)
+                fallback_provider = form.get("fallback_provider", [""])[0]
+                fallback_model = form.get("fallback_model", [""])[0]
+                assignments = {}
+                for role in ROLES:
+                    provider = form.get(f"role_provider_{role}", [""])[0].strip()
+                    model = form.get(f"role_model_{role}", [""])[0].strip()
+                    if provider or model:
+                        if not provider:
+                            provider = fallback_provider
+                        if not model:
+                            model = fallback_model
+                        assignments[role] = {"provider": provider, "model": model}
+                save_model_preferences(fallback_provider, fallback_model, assignments)
+                location = "/setup/provider?" + urlencode({"message": "AI provider configuration saved"})
+            else:
+                action_key = form.get("action_key", [""])[0]
+                choice = form.get("choice", [""])[0]
+                note = form.get("note", [""])[0]
+                with open_state_store(ROOT) as store:
+                    result = apply_principal_action(store, action_key, choice, note)
+                message = "Decision recorded: " + result["kind"]
+                location = "/?" + urlencode({"message": message})
         except (LatticeError, KeyError, ValueError) as error:
-            location = "/?" + urlencode({"message": str(error), "error": "1"})
+            target = "/setup/provider" if route == "/setup/provider" else "/"
+            location = target + "?" + urlencode({"message": str(error), "error": "1"})
         self.send_response(303)
         self.send_header("Location", location)
         self.send_header("Cache-Control", "no-store")
