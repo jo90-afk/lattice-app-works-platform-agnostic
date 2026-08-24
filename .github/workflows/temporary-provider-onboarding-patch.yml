@@ -1,0 +1,104 @@
+name: Temporary provider onboarding patch
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'feat/0.1.6-provider-onboarding'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/0.1.6-provider-onboarding
+      - name: Integrate provider onboarding UI and tests
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+
+          # Harden role preference validation against missing credentials.
+          p = Path('scripts/provider_setup.py')
+          s = p.read_text()
+          needle = '''    normalized: dict[str, dict[str, str]] = {}\n'''
+          replacement = '''    configured = {item["provider"] for item in configured_providers()}\n    if fallback_provider not in configured:\n        raise ValueError("Fallback provider is not configured")\n    normalized: dict[str, dict[str, str]] = {}\n'''
+          if needle not in s:
+              raise SystemExit('provider preference marker missing')
+          s = s.replace(needle, replacement, 1)
+          needle = '''        if provider not in PROVIDERS or not model:\n            raise ValueError(f"Role {role} requires provider and model")\n        normalized[role] = {"provider": provider, "model": model}\n'''
+          replacement = '''        if provider not in PROVIDERS or not model:\n            raise ValueError(f"Role {role} requires provider and model")\n        if provider not in configured:\n            raise ValueError(f"Role {role} uses an unconfigured provider")\n        normalized[role] = {"provider": provider, "model": model}\n'''
+          s = s.replace(needle, replacement, 1)
+          p.write_text(s)
+
+          p = Path('scripts/control_server.py')
+          s = p.read_text()
+          if 'from provider_setup import' not in s:
+              s = s.replace(
+                  'from portfolio_dashboard import render_portfolio_html, render_project_html\n',
+                  'from portfolio_dashboard import render_portfolio_html, render_project_html\nfrom provider_setup import PROVIDERS, ROLES, runtime_model_status, save_model_preferences, save_provider\n',
+                  1,
+              )
+
+          render_marker = '''def render_html(model: dict, flash: str | None = None, flash_error: bool = False) -> str:\n    return render_portfolio_html(model, flash, flash_error)\n'''
+          render_replacement = '''def _provider_banner(status: dict) -> str:\n    if not status.get("configured"):\n        return """<section style='margin:0 0 24px;padding:18px 20px;border:1px solid #e1d4b9;background:#fff9ed;border-radius:10px;display:flex;justify-content:space-between;gap:18px;align-items:center'><div><span style='font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#9b8157'>Setup</span><strong style='display:block;font-family:Georgia,serif;font-size:18px;font-weight:500;margin:4px 0'>Connect AI providers</strong><span style='font-size:12px;color:#7c7468'>Add credentials, choose a default model, and optionally assign different models to different agent roles.</span></div><a href='/setup/provider' style='border:1px solid #cdbb98;background:#fff;border-radius:7px;padding:9px 12px;font-size:11px;font-weight:700;white-space:nowrap'>Set up AI providers</a></section>"""\n    providers = ", ".join(item["label"] for item in status.get("providers", []))\n    fallback = status.get("fallback") or {}\n    return f"""<section style='margin:0 0 18px;padding:10px 14px;border:1px solid #e5dfd3;background:#fbfaf6;border-radius:8px;display:flex;justify-content:space-between;gap:12px;align-items:center;font-size:11px;color:#7c817a'><span><strong style='color:#445044'>AI execution</strong> · {html.escape(providers)} · default {html.escape(str(fallback.get('provider','')))} / {html.escape(str(fallback.get('model','')))}</span><a href='/setup/provider' style='font-weight:700;color:#62785e'>Configure models →</a></section>"""\n\n\ndef render_html(model: dict, flash: str | None = None, flash_error: bool = False) -> str:\n    page = render_portfolio_html(model, flash, flash_error)\n    banner = _provider_banner(runtime_model_status())\n    return page.replace("<section class='portfolio-title'>", banner + "<section class='portfolio-title'>", 1)\n\n\ndef render_provider_setup_html(message: str | None = None, error: bool = False) -> str:\n    status = runtime_model_status()\n    configured = {item["provider"]: item for item in status.get("providers", [])}\n    fallback = status.get("fallback") or {}\n    roles = status.get("roles") or {}\n    provider_options = "".join(\n        f"<option value='{html.escape(key)}'{{' selected' if fallback.get('provider') == key else ''}}>{html.escape(spec['label'])}</option>"\n        for key, spec in PROVIDERS.items()\n    )\n    credential_rows = []\n    for key, spec in PROVIDERS.items():\n        state = "Configured" if key in configured else "Not configured"\n        credential_rows.append(f"""<label><span>{html.escape(spec['label'])}</span><small>{state}</small><input type='password' name='key_{html.escape(key)}' autocomplete='off' placeholder='{'Leave blank to keep existing key' if key in configured else 'Paste API key'}'></label>""")\n    role_rows = []\n    for role in ROLES:\n        assignment = roles.get(role) or {}\n        options = ["<option value=''>Use default</option>"] + [\n            f"<option value='{html.escape(key)}'{{' selected' if assignment.get('provider') == key else ''}}>{html.escape(spec['label'])}</option>"\n            for key, spec in PROVIDERS.items()\n        ]\n        role_rows.append(f"""<div class='role-row'><strong>{html.escape(role.title())}</strong><select name='role_provider_{html.escape(role)}'>{''.join(options)}</select><input name='role_model_{html.escape(role)}' value='{html.escape(str(assignment.get('model') or ''))}' placeholder='Model (blank = default)'></div>""")\n    flash = f"<div class='flash {'error' if error else ''}'>{html.escape(message)}</div>" if message else ""\n    return f"""<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Lattice · AI providers</title><style>\n:root{{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#26312b;background:#f5f1e8}}*{{box-sizing:border-box}}body{{margin:0;background:#f5f1e8}}header{{height:60px;padding:0 28px;background:#fbfaf6;border-bottom:1px solid #e5dfd3;display:flex;align-items:center;justify-content:space-between}}header strong{{font-family:Georgia,serif;letter-spacing:.14em}}header a{{font-size:12px;color:#62785e;text-decoration:none}}main{{max-width:860px;margin:auto;padding:40px 24px 70px}}h1{{font-family:Georgia,serif;font-size:31px;font-weight:500;margin:0 0 7px}}.lede{{color:#7e847d;font-family:Georgia,serif;font-style:italic;margin:0 0 28px}}section{{background:#fffdfa;border:1px solid #e5dfd3;border-radius:10px;padding:20px;margin:14px 0}}h2{{font-family:Georgia,serif;font-size:19px;font-weight:500;margin:0 0 4px}}section>p{{font-size:12px;color:#7e847d;margin:0 0 18px;line-height:1.5}}label{{display:grid;grid-template-columns:150px 1fr;gap:8px 14px;align-items:center;margin:12px 0;font-size:12px}}label span{{font-weight:700}}label small{{grid-column:1;font-size:10px;color:#8c918a}}label input{{grid-column:2;grid-row:1 / span 2}}input,select{{width:100%;border:1px solid #dcd6ca;border-radius:7px;background:#fff;padding:9px 10px;font:inherit;color:#26312b}}.role-row{{display:grid;grid-template-columns:150px 180px 1fr;gap:10px;align-items:center;padding:9px 0;border-top:1px solid #eee9df;font-size:11px}}.role-row:first-child{{border-top:0}}details{{border-top:1px solid #eee9df;padding-top:14px}}summary{{cursor:pointer;font-size:12px;font-weight:700;color:#62785e}}button{{border:0;border-radius:7px;background:#6f8669;color:#fff;padding:11px 16px;font-weight:700;cursor:pointer}}.actions{{display:flex;justify-content:flex-end;margin-top:18px}}.flash{{padding:11px 13px;background:#edf4e9;border:1px solid #c9d8c4;border-radius:8px;font-size:12px;color:#557050;margin-bottom:14px}}.flash.error{{background:#faece9;border-color:#e2c1ba;color:#92594f}}.note{{font-size:11px;color:#90958e;margin-top:10px}}@media(max-width:650px){{main{{padding:28px 14px}}label,.role-row{{grid-template-columns:1fr}}label input,label small{{grid-column:1;grid-row:auto}}}}\n</style></head><body><header><strong>LATTICE</strong><a href='/'>← Project portfolio</a></header><main><h1>AI providers</h1><p class='lede'>Connect the models your agency can use, then choose which roles should use which model.</p>{flash}<form method='post' action='/setup/provider'>\n<section><h2>1. Provider credentials</h2><p>Keys are stored in your local Lattice credential store, never in project state, snapshots, or the repository.</p>{''.join(credential_rows)}</section>\n<section><h2>2. Default model</h2><p>Every role uses this unless you override it below.</p><label><span>Provider</span><select name='fallback_provider' required>{provider_options}</select></label><label><span>Model</span><input name='fallback_model' required value='{html.escape(str(fallback.get('model') or ''))}' placeholder='Model ID'></label></section>\n<section><h2>3. Role preferences</h2><p>Optional. Use different models where they fit the work—for example Claude for Experience and GPT for Architecture.</p><details><summary>Customize agent roles</summary><div style='margin-top:12px'>{''.join(role_rows)}</div></details></section>\n<div class='actions'><button type='submit'>Save AI configuration</button></div><p class='note'>Lattice records which provider/model actually performed work as execution provenance. Your secret keys are never included in that record.</p></form></main></body></html>"""\n'''
+          if render_marker not in s:
+              raise SystemExit('render_html marker missing')
+          s = s.replace(render_marker, render_replacement, 1)
+
+          get_marker = '''            elif parsed.path == "/project":\n                project_id = query.get("project", [""])[0]\n                payload = render_project_html(self._model(), project_id).encode()\n                status, content_type = 200, "text/html; charset=utf-8"\n'''
+          get_replacement = get_marker + '''            elif parsed.path == "/setup/provider":\n                payload = render_provider_setup_html(query.get("message", [None])[0], query.get("error", ["0"])[0] == "1").encode()\n                status, content_type = 200, "text/html; charset=utf-8"\n            elif parsed.path == "/api/provider-status":\n                payload = json.dumps(runtime_model_status(), indent=2, sort_keys=True).encode()\n                status, content_type = 200, "application/json; charset=utf-8"\n'''
+          if get_marker not in s:
+              raise SystemExit('GET route marker missing')
+          s = s.replace(get_marker, get_replacement, 1)
+
+          post_marker = '''    def do_POST(self) -> None:  # noqa: N802\n        if urlparse(self.path).path != "/action":\n            self._send(404, "text/plain; charset=utf-8", b"Not found\\n")\n            return\n        length = int(self.headers.get("Content-Length", "0"))\n        form = parse_qs(self.rfile.read(length).decode("utf-8"), keep_blank_values=True)\n        try:\n            action_key = form.get("action_key", [""])[0]\n            choice = form.get("choice", [""])[0]\n            note = form.get("note", [""])[0]\n            with open_state_store(ROOT) as store:\n                result = apply_principal_action(store, action_key, choice, note)\n            message = "Decision recorded: " + result["kind"]\n            location = "/?" + urlencode({"message": message})\n        except (LatticeError, KeyError, ValueError) as error:\n            location = "/?" + urlencode({"message": str(error), "error": "1"})\n        self.send_response(303)\n'''
+          post_replacement = '''    def do_POST(self) -> None:  # noqa: N802\n        route = urlparse(self.path).path\n        if route not in {"/action", "/setup/provider"}:\n            self._send(404, "text/plain; charset=utf-8", b"Not found\\n")\n            return\n        length = int(self.headers.get("Content-Length", "0"))\n        form = parse_qs(self.rfile.read(length).decode("utf-8"), keep_blank_values=True)\n        try:\n            if route == "/setup/provider":\n                for provider in PROVIDERS:\n                    key = form.get(f"key_{provider}", [""])[0].strip()\n                    if key:\n                        save_provider(provider, key)\n                fallback_provider = form.get("fallback_provider", [""])[0]\n                fallback_model = form.get("fallback_model", [""])[0]\n                assignments = {}\n                for role in ROLES:\n                    provider = form.get(f"role_provider_{role}", [""])[0].strip()\n                    model = form.get(f"role_model_{role}", [""])[0].strip()\n                    if provider or model:\n                        if not provider:\n                            provider = fallback_provider\n                        if not model:\n                            model = fallback_model\n                        assignments[role] = {"provider": provider, "model": model}\n                save_model_preferences(fallback_provider, fallback_model, assignments)\n                location = "/setup/provider?" + urlencode({"message": "AI provider configuration saved"})\n            else:\n                action_key = form.get("action_key", [""])[0]\n                choice = form.get("choice", [""])[0]\n                note = form.get("note", [""])[0]\n                with open_state_store(ROOT) as store:\n                    result = apply_principal_action(store, action_key, choice, note)\n                message = "Decision recorded: " + result["kind"]\n                location = "/?" + urlencode({"message": message})\n        except (LatticeError, KeyError, ValueError) as error:\n            target = "/setup/provider" if route == "/setup/provider" else "/"\n            location = target + "?" + urlencode({"message": str(error), "error": "1"})\n        self.send_response(303)\n'''
+          if post_marker not in s:
+              raise SystemExit('POST route marker missing')
+          s = s.replace(post_marker, post_replacement, 1)
+          s = s.replace('server_version = "LatticeControl/0.1.5"', 'server_version = "LatticeControl/0.1.6"', 1)
+          p.write_text(s)
+
+          # Release metadata.
+          Path('VERSION').write_text('0.1.6\n')
+          Path('README.md').write_text(Path('README.md').read_text().replace('# Lattice App Works 0.1.5', '# Lattice App Works 0.1.6', 1))
+          manifest = Path('seed/SEED-MANIFEST.json')
+          data = json.loads(manifest.read_text())
+          data['version'] = '0.1.6'
+          manifest.write_text(json.dumps(data, indent=2) + '\n')
+          ch = Path('CHANGELOG.md')
+          text = ch.read_text()
+          entry = '''## 0.1.6\n\n- Add first-run AI provider onboarding to the human control surface instead of requiring users to edit configuration files.\n- Store provider credentials in a local private credential store outside repositories, project state, and snapshots.\n- Add a default model plus optional per-role provider/model assignments so different reasoning and execution roles can use different models.\n- Expose only non-secret provider/model configuration through the dashboard and provider-status API.\n\n'''
+          if '## 0.1.6' not in text:
+              text = text.replace('# Changelog\n\n', '# Changelog\n\n' + entry, 1)
+          ch.write_text(text)
+
+          # Tests.
+          Path('tests/test_provider_setup.py').write_text('''from __future__ import annotations\n\nimport json\nimport os\nimport sys\nimport tempfile\nimport unittest\nfrom pathlib import Path\nfrom unittest.mock import patch\n\nROOT = Path(__file__).resolve().parents[1]\nsys.path.insert(0, str(ROOT / "scripts"))\n\nfrom provider_setup import resolve_model, runtime_model_status, save_model_preferences, save_provider\n\n\nclass ProviderSetupTest(unittest.TestCase):\n    def test_credentials_stay_out_of_status_and_roles_can_use_different_models(self):\n        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"LATTICE_CONFIG_DIR": temporary}, clear=False):\n            save_provider("openai", "openai-secret-value")\n            save_provider("anthropic", "anthropic-secret-value")\n            save_model_preferences(\n                "openai",\n                "gpt-architecture-default",\n                {\n                    "experience": {"provider": "anthropic", "model": "claude-interface"},\n                    "architecture": {"provider": "openai", "model": "gpt-architecture"},\n                },\n            )\n            status = runtime_model_status()\n            encoded = json.dumps(status)\n            self.assertTrue(status["configured"])\n            self.assertNotIn("openai-secret-value", encoded)\n            self.assertNotIn("anthropic-secret-value", encoded)\n            self.assertEqual(resolve_model("experience"), {"provider": "anthropic", "model": "claude-interface"})\n            self.assertEqual(resolve_model("architecture"), {"provider": "openai", "model": "gpt-architecture"})\n            self.assertEqual(resolve_model("services"), {"provider": "openai", "model": "gpt-architecture-default"})\n\n    def test_unconfigured_provider_cannot_be_assigned(self):\n        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"LATTICE_CONFIG_DIR": temporary}, clear=False):\n            save_provider("openai", "secret")\n            with self.assertRaisesRegex(ValueError, "unconfigured provider"):\n                save_model_preferences("openai", "gpt", {"experience": {"provider": "anthropic", "model": "claude"}})\n\n\nif __name__ == "__main__":\n    unittest.main()\n''')
+
+          # Add UI-level checks without persisting any real secret.
+          p = Path('tests/test_control_server.py')
+          ts = p.read_text()
+          if 'render_provider_setup_html' not in ts:
+              ts = ts.replace('from control_server import ', 'from control_server import ', 1)
+              import_line = next((line for line in ts.splitlines() if line.startswith('from control_server import ')), None)
+              if import_line:
+                  new_line = import_line.rstrip()[:-1] + ', render_provider_setup_html)' if import_line.rstrip().endswith(')') else import_line + ', render_provider_setup_html'
+                  ts = ts.replace(import_line, new_line, 1)
+              else:
+                  ts = ts.replace('from supervision_model import supervision_model', 'from control_server import render_provider_setup_html\nfrom supervision_model import supervision_model', 1)
+          marker = '\n\nif __name__ == "__main__":\n'
+          test = '''\n    def test_provider_setup_page_supports_role_specific_models_without_showing_keys(self):\n        page = render_provider_setup_html()\n        self.assertIn("AI providers", page)\n        self.assertIn("Default model", page)\n        self.assertIn("Customize agent roles", page)\n        self.assertIn("Experience", page)\n        self.assertIn("Architecture", page)\n        self.assertIn("password", page)\n        self.assertNotIn("api_key", page)\n\n'''
+          if test.strip() not in ts:
+              ts = ts.replace(marker, test + marker, 1)
+          p.write_text(ts)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add scripts/provider_setup.py scripts/control_server.py tests/test_provider_setup.py tests/test_control_server.py VERSION README.md seed/SEED-MANIFEST.json CHANGELOG.md
+          git commit -m "Add UI provider onboarding and per-role models"
+          git push origin HEAD:feat/0.1.6-provider-onboarding
