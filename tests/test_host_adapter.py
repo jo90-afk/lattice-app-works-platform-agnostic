@@ -89,6 +89,36 @@ class HostAdapterTest(unittest.TestCase):
         self.assertIn("action_claimed", event_types)
         self.assertIn("action_submitted", event_types)
 
+    def test_external_project_artifact_ref_submits_without_engine_capsule_file(self) -> None:
+        claimed = self.claim()
+        completed = handle_envelope(
+            self.store,
+            self.submit_envelope(
+                claimed["lease_id"],
+                ["project-artifact://project-001/platform/external-result.txt"],
+            ),
+        )
+        self.assertEqual(completed["result"]["status"], "pending")
+        self.assertEqual(completed["lifecycle"]["event_type"], "action_submitted")
+
+    def test_external_project_artifact_ref_preserves_role_ownership(self) -> None:
+        claimed = self.claim()
+        envelope = self.submit_envelope(
+            claimed["lease_id"],
+            ["project-artifact://project-001/services/server.py"],
+        )
+        with self.assertRaisesRegex(LatticeError, "does not own external project artifact path"):
+            handle_envelope(self.store, envelope)
+        self.assertIsNotNone(
+            self.store.conn.execute(
+                "SELECT 1 FROM leases WHERE id = ?", (claimed["lease_id"],)
+            ).fetchone()
+        )
+        starts = self.store.conn.execute(
+            "SELECT COUNT(*) FROM events WHERE event_type = 'completion_started'"
+        ).fetchone()[0]
+        self.assertEqual(starts, 0)
+
     def test_duplicate_completion_replays_without_duplicate_state_mutation(self) -> None:
         claimed = self.claim()
         envelope = self.submit_envelope(claimed["lease_id"])
