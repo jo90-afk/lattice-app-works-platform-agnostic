@@ -27,6 +27,7 @@ from recovery import (
     validate_project_artifacts,
 )
 from state_engine import LatticeError, StateStore
+from write_ownership import validate_artifact_ownership
 
 ROOT = Path(__file__).resolve().parents[1]
 OPERATIONS = {"claim", "renew", "complete", "event", "inspect", "recover"}
@@ -116,6 +117,7 @@ def _complete(store: StateStore, envelope: dict[str, Any]) -> dict[str, Any]:
     if outcome_type == "submit":
         artifact_refs = list(outcome.get("artifact_refs") or [])
         validate_project_artifacts(store.root, project_id, artifact_refs)
+        validate_artifact_ownership(store.root, project_id, role, artifact_refs)
 
     begin_completion(store, lease=lease, outcome=outcome)
 
