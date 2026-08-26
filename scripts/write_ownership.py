@@ -5,11 +5,14 @@ from __future__ import annotations
 
 import re
 from pathlib import Path, PurePosixPath
+from urllib.parse import unquote, urlsplit
 
 from state_engine import LatticeError
 
 
 _URI = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
+_PROJECT_ARTIFACT_SCHEME = "project-artifact"
+_PROJECT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 def role_write_domains(root: Path) -> dict[str, list[str]]:
@@ -68,13 +71,59 @@ def _prefix(pattern: str, project_id: str) -> str:
     return rendered.rstrip("/")
 
 
+def _project_artifact_parts(value: str) -> tuple[str, str] | None:
+    """Parse a typed external project artifact without binding it to engine layout."""
+    parsed = urlsplit(value)
+    if parsed.scheme != _PROJECT_ARTIFACT_SCHEME:
+        return None
+    if parsed.query or parsed.fragment:
+        raise LatticeError("Project artifact references cannot contain query or fragment data")
+    project_id = unquote(parsed.netloc)
+    if not project_id or not _PROJECT_ID.fullmatch(project_id):
+        raise LatticeError("Project artifact reference has an invalid project id: " + value)
+    path = _normalize_repo_path(unquote(parsed.path.lstrip("/")))
+    if path in {"", "."}:
+        raise LatticeError("Project artifact reference must name a project-relative path: " + value)
+    return project_id, path
+
+
+def _project_relative_prefix(pattern: str, project_id: str) -> str | None:
+    """Translate one canonical project write domain to a project-relative prefix."""
+    rendered = _prefix(pattern, project_id)
+    project_root = f"projects/{project_id}"
+    if rendered == project_root:
+        return ""
+    if rendered.startswith(project_root + "/"):
+        return rendered[len(project_root) + 1 :]
+    return None
+
+
+def _project_relative_owned(root: Path, project_id: str, role: str, path: str) -> bool:
+    patterns = role_write_domains(root).get(role, [])
+    prefixes = [
+        prefix
+        for pattern in patterns
+        if (prefix := _project_relative_prefix(pattern, project_id)) is not None
+    ]
+    return any(
+        prefix == "" or path == prefix or path.startswith(prefix + "/")
+        for prefix in prefixes
+    )
+
+
 def repository_artifact_owned(
     root: Path,
     project_id: str,
     role: str,
     artifact_ref: str,
 ) -> bool:
-    """Return true for external logical refs or repository paths owned by role."""
+    """Return true for allowed logical refs or artifact paths owned by the role."""
+    project_artifact = _project_artifact_parts(artifact_ref)
+    if project_artifact is not None:
+        ref_project_id, path = project_artifact
+        return ref_project_id == project_id and _project_relative_owned(
+            root, project_id, role, path
+        )
     if _URI.match(artifact_ref):
         return True
     path = _normalize_repo_path(artifact_ref)
@@ -95,6 +144,18 @@ def validate_artifact_ownership(
     artifact_refs: list[str],
 ) -> None:
     for artifact_ref in artifact_refs:
+        project_artifact = _project_artifact_parts(artifact_ref)
+        if project_artifact is not None:
+            ref_project_id, path = project_artifact
+            if ref_project_id != project_id:
+                raise LatticeError(
+                    f"Artifact {artifact_ref!r} is outside project {project_id!r}"
+                )
+            if not _project_relative_owned(root, project_id, role, path):
+                raise LatticeError(
+                    f"Role {role!r} does not own external project artifact path {path!r}"
+                )
+            continue
         if not repository_artifact_owned(root, project_id, role, artifact_ref):
             if _URI.match(artifact_ref):
                 continue
