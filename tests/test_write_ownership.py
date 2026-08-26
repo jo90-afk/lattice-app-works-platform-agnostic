@@ -49,6 +49,25 @@ class WriteOwnershipTest(unittest.TestCase):
             )
         )
 
+    def test_typed_external_project_refs_use_project_relative_role_domains(self) -> None:
+        valid = "project-artifact://project-001/platform/app.py"
+        wrong_role = "project-artifact://project-001/services/server.py"
+        wrong_project = "project-artifact://project-002/platform/app.py"
+
+        self.assertTrue(repository_artifact_owned(ROOT, "project-001", "application", valid))
+        self.assertFalse(
+            repository_artifact_owned(ROOT, "project-001", "application", wrong_role)
+        )
+        self.assertFalse(
+            repository_artifact_owned(ROOT, "project-001", "application", wrong_project)
+        )
+        validate_artifact_ownership(ROOT, "project-001", "application", [valid])
+
+        with self.assertRaisesRegex(LatticeError, "does not own external project artifact path"):
+            validate_artifact_ownership(ROOT, "project-001", "application", [wrong_role])
+        with self.assertRaisesRegex(LatticeError, "outside project"):
+            validate_artifact_ownership(ROOT, "project-001", "application", [wrong_project])
+
     def test_logical_external_refs_do_not_claim_repository_ownership(self) -> None:
         self.assertTrue(
             repository_artifact_owned(
@@ -66,6 +85,13 @@ class WriteOwnershipTest(unittest.TestCase):
                 "project-001",
                 "application",
                 ["projects/project-001/platform/../services/server.py"],
+            )
+        with self.assertRaises(LatticeError):
+            validate_artifact_ownership(
+                ROOT,
+                "project-001",
+                "application",
+                ["project-artifact://project-001/platform/../services/server.py"],
             )
         with self.assertRaisesRegex(LatticeError, "does not own artifact path"):
             validate_artifact_ownership(
