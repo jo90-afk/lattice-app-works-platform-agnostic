@@ -61,6 +61,65 @@ Open `http://127.0.0.1:8765`. The browser is organized around the Principal's ac
 
 Principal-only exceptions and Principal-owned commitments can be completed directly in the browser. The UI does not create a separate authority system: it claims the exact currently advertised Principal action key and executes the same guarded lifecycle used by the CLI, preserving lease checks, durable state transitions, lifecycle telemetry, and project history. Detailed evidence and consequence state remain inspectable on demand instead of occupying the primary dashboard hierarchy. Machine-readable supervision state is available at `/api/state`.
 
+## Remote/web operation through GitHub
+
+When a chat host has a GitHub connector or GitHub MCP with read/write access, Lattice can govern a target repository without cloning that target into the chat environment or starting the local control server. This is a first-class hosted control-plane mode, not a second governance system.
+
+Invoke the governance repository in natural language and name the target repository and goal. For example:
+
+    Use lattice-app-works-platform-agnostic as governance for <owner>/<target-repo> and continue <goal>.
+
+In this mode, the chat interface is the **Director control surface**. Before mutating the target repository, the Director reads the current Lattice governance and the target repository's current authoritative state. The Director may inspect branches, pull requests, diffs, comments, workflow runs, and logs through GitHub, but chat memory and narrative status never outrank repository state or executable evidence.
+
+The remote implementation maps Lattice roles and state onto GitHub deliberately:
+
+| Lattice concept | GitHub connector / MCP implementation |
+| --- | --- |
+| Director | The chat session operating the connected GitHub tools |
+| Agency governance | The current `lattice-app-works-platform-agnostic` repository, read before governed target mutations |
+| Project truth | The target repository plus its governed project state and durable artifacts |
+| Active milestone | A bounded pull request and its head branch |
+| Quality | GitHub Actions validation jobs, checks, and failure logs |
+| Assurance | GitHub Actions gates that establish the required evidence and readiness before milestone handoff |
+| Principal consequence boundary | Explicit human authorization when merge, deployment, publication, destructive action, or another external consequence is Principal-owned |
+
+### Pull requests are the remote milestone surface
+
+For connector-driven work, the active pull request is the remote control surface for one milestone. The Lattice state model still defines the objective, readiness conditions, authority, and consequence boundaries; the PR is where that bounded milestone is implemented, verified, remediated, and handed off.
+
+Open the governed branch and PR early enough that the work has an explicit frontier. Keep the PR description synchronized with the durable milestone state. At minimum it should make the governed objective and important invariants legible; as the candidate stabilizes it should also identify the final candidate SHA, verification evidence, material remediations, and any unresolved exception or Principal decision.
+
+Do not treat a PR as merely a code-review container. It is the remotely inspectable milestone capsule: branch history records implementation, the PR records the bounded outcome and current handoff state, and Actions record executable Quality and Assurance evidence.
+
+### Quality and Assurance run through GitHub Actions
+
+In connector mode, the chat Director does not self-certify its own implementation. Quality and Assurance are externalized into the target repository's GitHub Actions workflows. A failed required workflow is a blocker, not a conversational judgment call.
+
+The operating loop is:
+
+1. implement on the governed milestone branch;
+2. let the PR-triggered workflows execute;
+3. inspect the exact failed job, step, and logs when a check is red;
+4. remediate the underlying implementation, test, authority, delivery-context, or workflow defect without weakening the check merely to obtain green status;
+5. rerun against the new candidate head; and
+6. treat the milestone as technically ready only when the required Quality and Assurance evidence is green and no blocking review or exception remains.
+
+A green candidate is a **pre-merge handoff state**, not automatic permission to publish. If merging the base branch triggers production deployment or another externally consequential action, the Director stops at the Principal boundary and asks for that decision. If merge is within delegated authority, the repository's authority model governs whether the Director may complete it.
+
+### Recovering work that began outside Lattice governance
+
+An out-of-governance implementation is evidence of product intent, not automatically authoritative implementation.
+
+If a feature branch or PR was created before Lattice was invoked, first separate **the intended outcome** from **the implementation that happened to be produced**. Inspect the PR diff, description, comments, surrounding repository state, and relevant conversation context to reconstruct the coherent product goal and invariants. If the branch violated the governance runtime or accumulated incompatible authority assumptions, close or discard it rather than laundering it into compliance after the fact.
+
+Restart from the authoritative base under Lattice governance, create a governed replacement branch/PR, implement the reconstructed goal, and run the full required GitHub Actions evidence path again. Salvage individual artifacts only when they can be independently shown to satisfy the newly established governed state.
+
+This recovery pattern is intentionally conservative: **preserve intent, re-establish authority, then re-implement and verify**.
+
+### Connector mode versus execution packs
+
+Live GitHub connector/MCP access is different from the generated ChatGPT Work execution-pack adapter. With a live connector, the Director can read current governance and target-repository state and can make governed GitHub mutations directly, so there is no required export/delta round trip. Execution packs remain the adapter for hosted agents that do not have live repository access or that need a deliberately frozen, scoped frontier.
+
 ## Evaluation harness
 
 0.0.8 established a fail-closed evidence suite for testing whether durable state, bounded authority, recovery, and independent verification actually reduce autonomy failures.
@@ -182,13 +241,14 @@ See `docs/TRUTH-LEDGER.md`.
 | Local repository-aware agent | Read `AGENTS.md`, then use `scripts/lattice.py` |
 | Codex | Open the repository root; root `AGENTS.md` is canonical |
 | Claude Code | Open the repository root; `CLAUDE.md` imports `AGENTS.md` |
-| ChatGPT Work | Generate and upload a scoped execution pack |
+| Chat/web host with GitHub connector or GitHub MCP | Invoke `lattice-app-works-platform-agnostic` as governance in natural language; the chat session is Director and PR/Actions are the milestone and verification surfaces |
+| ChatGPT Work without live repository access | Generate and upload a scoped execution pack |
 
 Generate a ChatGPT Work pack:
 
     python3 scripts/lattice.py export-chatgpt-work --project first-project --overwrite
 
-Hosted results return one project-revision-guarded delta. Reconcile artifact files first, then apply it with `python3 scripts/lattice.py apply-delta --file <delta.json>`. Generated packs are disposable and ignored by Git.
+Hosted results from execution-pack mode return one project-revision-guarded delta. Reconcile artifact files first, then apply it with `python3 scripts/lattice.py apply-delta --file <delta.json>`. Generated packs are disposable and ignored by Git. Live GitHub connector/MCP mode does not require this export/apply-delta cycle.
 
 ## GitHub initialization
 
