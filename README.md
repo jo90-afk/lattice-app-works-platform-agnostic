@@ -120,6 +120,17 @@ This recovery pattern is intentionally conservative: **preserve intent, re-estab
 
 Live GitHub connector/MCP access is different from the generated ChatGPT Work execution-pack adapter. With a live connector, the Director can read current governance and target-repository state and can make governed GitHub mutations directly, so there is no required export/delta round trip. Execution packs remain the adapter for hosted agents that do not have live repository access or that need a deliberately frozen, scoped frontier.
 
+### Reconcile declared and observed GitHub state
+
+`github-check` compares scoped project declarations with fresh GitHub PR, release,
+and optional commit-comparison captures. It identifies merged PRs still declared
+active, published releases still declared pending, and historical open branches
+with no commits ahead. `github-reconcile` records observations through the guarded
+truth ledger, preserving history and unresolved frontier attention. Neither
+command grants acceptance, closes pull requests, or authorizes publication.
+See [`docs/GITHUB-RECONCILIATION.md`](docs/GITHUB-RECONCILIATION.md) for the connector
+envelope, exit codes, and runtime integration.
+
 ## Evaluation harness
 
 0.0.8 established a fail-closed evidence suite for testing whether durable state, bounded authority, recovery, and independent verification actually reduce autonomy failures.

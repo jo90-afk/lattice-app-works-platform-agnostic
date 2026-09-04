@@ -71,3 +71,14 @@ If GitHub retries after a lost response, send the identical envelope. Lattice's 
 A GitHub pull request is transport and collaboration evidence, not Lattice acceptance. A merged branch does not by itself satisfy a readiness condition. When a PR URL, check run, or review is useful evidence, record or reference it through the normal submission/review transition rather than turning GitHub status into an implicit gate.
 
 Copilot code review may use repository skills when relevant, but Lattice's verifier role and required verdict remain the acceptance authority for the project condition.
+
+## Reconcile external state
+
+Use the shared [GitHub reconciliation contract](../../docs/GITHUB-RECONCILIATION.md)
+when a capsule's active PR or release declaration may have outlived the external
+state. `scripts/lattice.py github-check` validates fresh repository-scoped GET
+captures without opening a state store. The Director can record the same report
+with `github-reconcile`, using the existing contract record, truth versions,
+project revision guard, and attention transitions. A zero-ahead open branch is a
+supersession candidate requiring a scoped Director disposition; transport state
+never substitutes for independent verification or publication authorization.

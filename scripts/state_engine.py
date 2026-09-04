@@ -520,6 +520,7 @@ class StateStore:
         confidence: float | None = None,
         source_ref: str | None = None,
         material: bool | None = None,
+        attention_state: str | None = None,
     ) -> dict[str, Any]:
         self._validate_role(changed_by)
         current = self.conn.execute("SELECT * FROM truths WHERE id = ?", (truth_id,)).fetchone()
@@ -528,6 +529,8 @@ class StateStore:
         new_status = epistemic_status or current["epistemic_status"]
         if new_status not in self.policy["truth_epistemic_states"]:
             raise LatticeError("Invalid epistemic status: " + new_status)
+        if attention_state is not None and attention_state not in self.policy["truth_attention_states"]:
+            raise LatticeError("Invalid attention state: " + attention_state)
         new_confidence = current["confidence"] if confidence is None else confidence
         if new_confidence is not None and not 0 <= new_confidence <= 1:
             raise LatticeError("Confidence must be between 0 and 1")
@@ -566,6 +569,8 @@ class StateStore:
                 {"version": version, "reason": reason, "previous_status": current["epistemic_status"]},
             )
             self._invalidate_for_truth(truth_id, revision, changed_by, reason)
+            if attention_state is not None and attention_state != current["attention_state"]:
+                self._move_truth_attention(current, attention_state, changed_by, reason, revision)
         self.export_snapshot()
         return dict(self.conn.execute("SELECT * FROM truths WHERE id = ?", (truth_id,)).fetchone())
 
@@ -1577,6 +1582,7 @@ class StateStore:
             """SELECT DISTINCT t.* FROM truths t
                JOIN condition_truths ct ON ct.truth_id = t.id
                WHERE t.project_id = ? AND t.attention_state = 'frontier'
+                 AND t.epistemic_status IN ('observed', 'accepted')
                  AND NOT EXISTS (
                    SELECT 1 FROM condition_truths active_ct
                    JOIN conditions active_c ON active_c.id = active_ct.condition_id

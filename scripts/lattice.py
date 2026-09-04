@@ -14,6 +14,7 @@ from typing import Any
 from concurrency import claim_for_host_atomic
 from control_plane import read_model, recover_expired_leases
 from expertise import resolve_expertise
+from github_reconciliation import check_github_state, reconcile_github_state
 from hosted_delta import apply_delta_serialized
 from lifecycle import (
     advance_action,
@@ -54,6 +55,14 @@ def parser() -> argparse.ArgumentParser:
 
     commands.add_parser("validate")
     commands.add_parser("status")
+    github_check = commands.add_parser("github-check")
+    github_check.add_argument("--declarations", required=True)
+    github_check.add_argument("--observations", required=True)
+    github_reconcile = commands.add_parser("github-reconcile")
+    add_project(github_reconcile)
+    github_reconcile.add_argument("--observations", required=True)
+    github_reconcile.add_argument("--expected-revision", required=True, type=int)
+    github_reconcile.add_argument("--role", required=True)
     doctor = commands.add_parser("doctor")
     doctor.add_argument("--json", action="store_true")
 
@@ -303,6 +312,13 @@ def main() -> int:
         return 0
 
     try:
+        if args.command == "github-check":
+            report = check_github_state(
+                json.loads(Path(args.declarations).read_text(encoding="utf-8")),
+                json.loads(Path(args.observations).read_text(encoding="utf-8")),
+            )
+            emit(report)
+            return 1 if report["unresolved"] else 0
         with StateStore(ROOT) as store:
             if args.command == "status":
                 emit(store.status())
@@ -377,9 +393,15 @@ def main() -> int:
                 emit(store.status())
             elif args.command == "apply-delta":
                 emit(apply_delta_serialized(store, json.loads(Path(args.file).read_text(encoding="utf-8"))))
+            elif args.command == "github-reconcile":
+                emit(reconcile_github_state(
+                    store, project_id=args.project, role=args.role,
+                    expected_revision=args.expected_revision,
+                    envelope=json.loads(Path(args.observations).read_text(encoding="utf-8")),
+                ))
             else:
                 raise LatticeError("Unsupported command: " + args.command)
-    except (LatticeError, sqlite3.Error, ValueError, KeyError) as error:
+    except (LatticeError, sqlite3.Error, ValueError, KeyError, OSError) as error:
         print("Lattice rejected the operation: " + str(error), file=sys.stderr)
         return 2
     return 0
