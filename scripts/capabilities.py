@@ -26,6 +26,7 @@ def capabilities(root: Path = ROOT) -> dict:
             "host_adapter_protocol": host_version,
             "hosted_delta_schema": 1,
             "control_read_model": 1,
+            "github_observation_protocol": 1,
         },
         "state_backends": {
             "default": "sqlite",
@@ -44,6 +45,7 @@ def capabilities(root: Path = ROOT) -> dict:
             "shared-postgres-writers",
             "portable-snapshot",
             "evaluation-evidence",
+            "github-state-reconciliation",
         ],
     }
 

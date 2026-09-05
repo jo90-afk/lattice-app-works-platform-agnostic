@@ -48,6 +48,8 @@ jobs:
         run: python3 scripts/check_version.py
       - name: Validate repository and state contract
         run: python3 scripts/lattice.py validate
+      - name: Verify GitHub state reconciliation boundaries
+        run: python3 -m unittest discover -s tests -p "test_github_reconciliation.py" -v
       - name: Validate evaluation scenario registry
         run: python3 scripts/evaluation.py validate
       - name: Run executable autonomy evaluations
