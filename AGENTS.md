@@ -51,6 +51,26 @@ When every condition in the active milestone is satisfied or waived, and no bloc
 
 Production launch remains a Principal decision after technical readiness. A milestone acceptance never implies external publication or distribution.
 
+## Failure classification and anti-stall verification
+
+Verification exists to establish readiness, not to create an unbounded loop of reruns. When a check fails, classify the failure before launching another broad validation cycle.
+
+Use this order:
+
+1. inspect the exact failed job, step, assertion, log, or diagnostic artifact;
+2. classify the failure as an implementation defect, stale contract, authority mismatch, delivery-context defect, infrastructure/transient failure, or unrelated suite failure;
+3. remediate the smallest underlying cause without weakening a still-valid invariant;
+4. run the narrowest check that directly proves the remediation;
+5. rerun the full required gate only when the change could affect other readiness conditions, when the narrow check passes, or when the repository requires an exact-head aggregate result for acceptance.
+
+A test that encodes behavior explicitly retired or superseded by an accepted Principal or governance decision is a **stale contract**. Update that contract to assert the new invariant; do not restore obsolete product behavior merely to make the old test green.
+
+Do not serially rerun an expensive umbrella suite after every small correction when the failing assertion is already isolated. Accumulate closely related stale-contract or test-harness corrections behind targeted evidence, then run the aggregate suite once against the resulting candidate head. If the aggregate suite exposes another failure from the same accepted decision, inspect all nearby assertions for the same obsolete assumption before triggering another full run.
+
+A failing unrelated or flaky suite must still be understood, but it does not automatically invalidate evidence for an independent milestone condition. Determine whether the failure is causally connected to the candidate. Rerun the failed job directly when transient behavior is plausible. If it is truly unrelated, record that fact through the repository's existing exception or review mechanism rather than changing unrelated product code.
+
+When the required candidate-head evidence is green and no blocking review, exception, or Principal boundary remains, advance or merge promptly. Additional speculative validation after readiness has been established is process drift.
+
 ## Truth ledger
 
 World-state propositions belong in the truth ledger, not in transient prompts or discarded notes. Every truth has:
@@ -69,7 +89,7 @@ Use the guarded commands:
     python3 scripts/lattice.py truth-revise ...
     python3 scripts/lattice.py truth-move ...
     python3 scripts/lattice.py truth-link ...
-    python3 scripts/lattice.py truth-list --project <project-id> [--attention background]
+    python3 scripts/lattice.py truth-list --project first-project [--attention background]
 
 An accepted milestone automatically moves settled truths to background only when no active or planned condition still references them and no contradiction remains open. Every movement is retained in `truth_transitions`.
 
